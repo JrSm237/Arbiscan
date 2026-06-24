@@ -12,25 +12,39 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
-// Exchanges publics (pas besoin de clé API pour les prix)
-const EXCHANGE_IDS = ['binance', 'bybit', 'okx', 'kraken', 'kucoin', 'gate'];
+// 10 exchanges publics — pas de clé API requise
+const EXCHANGE_IDS = [
+  'binance', 'bybit', 'okx', 'kraken', 'kucoin',
+  'gate', 'mexc', 'bitget', 'htx', 'coinbaseadvanced'
+];
 
-// Paires à surveiller
+// Paires à surveiller — 30 paires (USDT + BTC + ETH)
 const SPOT_PAIRS = [
+  // Top caps USDT
   'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT',
   'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT',
   'MATIC/USDT', 'LINK/USDT', 'DOT/USDT', 'LTC/USDT',
+  'TRX/USDT', 'SHIB/USDT', 'TON/USDT', 'UNI/USDT',
+  'ATOM/USDT', 'XLM/USDT', 'BCH/USDT', 'NEAR/USDT',
+  'APT/USDT', 'ARB/USDT', 'OP/USDT', 'FIL/USDT',
+  'HBAR/USDT', 'VET/USDT', 'ALGO/USDT', 'ICP/USDT',
+  // Paires BTC
+  'ETH/BTC', 'SOL/BTC',
 ];
 
-// Cache des instances exchange (réutilisées)
+// Cache instances exchange
 const exchangeInstances = {};
 
 function getExchange(id) {
   if (!exchangeInstances[id]) {
-    exchangeInstances[id] = new ccxt[id]({
-      timeout: 8000,
-      enableRateLimit: true,
-    });
+    try {
+      exchangeInstances[id] = new ccxt[id]({
+        timeout: 10000,
+        enableRateLimit: true,
+      });
+    } catch {
+      return null;
+    }
   }
   return exchangeInstances[id];
 }
@@ -38,16 +52,24 @@ function getExchange(id) {
 // ── FETCH TICKER AVEC TIMEOUT ────────────────────────────────────────────────
 async function fetchTickerSafe(exchangeId, symbol) {
   try {
-    const ex     = getExchange(exchangeId);
+    const ex = getExchange(exchangeId);
+    if (!ex) return null;
+
+    // Vérifier que la paire est supportée
+    await ex.loadMarkets().catch(() => {});
+    if (ex.markets && !ex.markets[symbol]) return null;
+
     const ticker = await ex.fetchTicker(symbol);
-    if (!ticker || !ticker.last) return null;
+    if (!ticker || (!ticker.last && !ticker.bid && !ticker.ask)) return null;
+
     return {
       exchange: exchangeId,
       symbol,
-      bid:    ticker.bid,
-      ask:    ticker.ask,
+      bid:    ticker.bid    || ticker.last,
+      ask:    ticker.ask    || ticker.last,
       last:   ticker.last,
-      volume: ticker.baseVolume,
+      volume: ticker.baseVolume || 0,
+      ts:     ticker.timestamp || Date.now(),
     };
   } catch {
     return null;
@@ -65,55 +87,50 @@ async function fetchAllExchanges(symbol, exchangeIds) {
 }
 
 // ── CALCUL DES OPPORTUNITÉS D'ARBITRAGE ──────────────────────────────────────
-function findArbitrageOpportunities(tickers, minSpreadPct = 0.5, capital = 1000) {
+function findArbitrageOpportunities(tickers, minSpreadPct = 0.05, capital = 1000) {
   const opportunities = [];
 
   for (let i = 0; i < tickers.length; i++) {
     for (let j = 0; j < tickers.length; j++) {
       if (i === j) continue;
-      const buyer  = tickers[i]; // acheter ici (ask bas)
-      const seller = tickers[j]; // vendre ici  (bid haut)
+      const buyer  = tickers[i];
+      const seller = tickers[j];
 
-      // Utiliser last si bid/ask non disponibles
       const buyPrice  = buyer.ask  || buyer.last;
       const sellPrice = seller.bid || seller.last;
 
       if (!buyPrice || !sellPrice) continue;
 
       const spreadPct = ((sellPrice - buyPrice) / buyPrice) * 100;
-      if (spreadPct < 0.05) continue; // seuil absolu très bas
+      if (spreadPct < 0.05) continue;
 
-      // Estimation frais de trading (0.1% par leg = 0.2% aller-retour)
-      const feePct    = 0.2;
-      const netSpread = spreadPct - feePct;
-
+      // Frais réalistes : 0.1% par leg sur la plupart des exchanges
+      const feePct      = 0.2;
+      const netSpread   = spreadPct - feePct;
       const units       = capital / buyPrice;
       const grossProfit = units * (sellPrice - buyPrice);
       const fees        = capital * (feePct / 100);
       const netProfit   = grossProfit - fees;
 
-      // Score de confiance basé sur volume et spread
-      const minVolume   = Math.min(buyer.volume || 0, seller.volume || 0);
-      const confidence  = Math.min(95, Math.round(
-        50 + Math.min(30, spreadPct * 10) + Math.min(15, minVolume / 1000)
-      ));
+      // Fiabilité : on pénalise si le volume est faible
+      const minVolume  = Math.min(buyer.volume || 0, seller.volume || 0);
+      const volScore   = Math.min(20, minVolume > 0 ? Math.log10(minVolume) * 5 : 0);
+      const confidence = Math.min(95, Math.round(45 + Math.min(30, spreadPct * 8) + volScore));
 
-      // Fenêtre d'exécution estimée (plus le spread est petit, plus c'est rapide)
-      const windowSec = Math.max(10, Math.round(90 - spreadPct * 20));
-
+      const windowSec = Math.max(10, Math.round(90 - spreadPct * 15));
       const risk = spreadPct > 3 ? 'high' : spreadPct > 1.5 ? 'medium' : 'low';
 
       opportunities.push({
-        symbol:        buyer.symbol,
-        buyExchange:   buyer.exchange,
-        sellExchange:  seller.exchange,
+        symbol:       buyer.symbol,
+        buyExchange:  buyer.exchange,
+        sellExchange: seller.exchange,
         buyPrice,
         sellPrice,
-        spreadPct:     parseFloat(spreadPct.toFixed(3)),
-        netSpreadPct:  parseFloat(netSpread.toFixed(3)),
-        grossProfit:   parseFloat(grossProfit.toFixed(2)),
-        feesUSDT:      parseFloat(fees.toFixed(2)),
-        netProfit:     parseFloat(netProfit.toFixed(2)),
+        spreadPct:    parseFloat(spreadPct.toFixed(3)),
+        netSpreadPct: parseFloat(netSpread.toFixed(3)),
+        grossProfit:  parseFloat(grossProfit.toFixed(2)),
+        feesUSDT:     parseFloat(fees.toFixed(2)),
+        netProfit:    parseFloat(netProfit.toFixed(2)),
         confidence,
         windowSec,
         risk,
@@ -123,55 +140,90 @@ function findArbitrageOpportunities(tickers, minSpreadPct = 0.5, capital = 1000)
     }
   }
 
-  // Trier par profit net décroissant
   return opportunities.sort((a, b) => b.netProfit - a.netProfit);
 }
 
-// ── CACHE DES PRIX (TTL 15s) ─────────────────────────────────────────────────
-const priceCache = new Map(); // symbol -> { data, ts }
-const CACHE_TTL  = 15_000;
+// ── HISTORIQUE PRIX (pour graphiques) ────────────────────────────────────────
+// Stocke les derniers prix en mémoire (ring buffer de 60 points)
+const priceHistory = new Map(); // symbol -> [{ ts, prices: {exchange: price} }]
+const HISTORY_MAX  = 60;
+
+function recordPrices(symbol, tickers) {
+  if (!priceHistory.has(symbol)) priceHistory.set(symbol, []);
+  const hist = priceHistory.get(symbol);
+  const point = {
+    ts: Date.now(),
+    prices: {},
+  };
+  for (const t of tickers) {
+    point.prices[t.exchange] = t.last || t.bid || t.ask;
+  }
+  hist.push(point);
+  if (hist.length > HISTORY_MAX) hist.shift();
+}
+
+// ── CACHE DES PRIX (TTL 10s) ─────────────────────────────────────────────────
+const priceCache = new Map();
+const CACHE_TTL  = 10_000;
 
 async function getPrices(symbol, exchangeIds) {
-  const key = `${symbol}:${exchangeIds.join(',')}`;
+  const key = `${symbol}:${exchangeIds.sort().join(',')}`;
   const hit  = priceCache.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL) return hit.data;
 
   const data = await fetchAllExchanges(symbol, exchangeIds);
   priceCache.set(key, { data, ts: Date.now() });
+  recordPrices(symbol, data); // enregistre pour le graphique
   return data;
 }
 
 // ── ROUTES API ───────────────────────────────────────────────────────────────
 
-// GET /api/exchanges — liste des exchanges supportés + status
+// GET /api/exchanges
 app.get('/api/exchanges', (req, res) => {
-  res.json({
-    exchanges: EXCHANGE_IDS,
-    pairs:     SPOT_PAIRS,
-  });
+  res.json({ exchanges: EXCHANGE_IDS, pairs: SPOT_PAIRS });
 });
 
 // GET /api/ticker?symbol=BTC/USDT
 app.get('/api/ticker', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol requis' });
-
   const tickers = await fetchAllExchanges(symbol, EXCHANGE_IDS);
   res.json({ symbol, tickers });
 });
 
-// POST /api/scan — scan d'arbitrage principal
-// Body: { minSpread, capital, pairs, exchanges }
+// GET /api/prices?symbol=BTC/USDT — prix live par exchange
+app.get('/api/prices', async (req, res) => {
+  const { symbol = 'BTC/USDT' } = req.query;
+  const tickers = await fetchAllExchanges(symbol, EXCHANGE_IDS);
+  res.json({ symbol, tickers, ts: Date.now() });
+});
+
+// GET /api/history?symbol=BTC/USDT — historique pour graphique
+app.get('/api/history', async (req, res) => {
+  const { symbol = 'BTC/USDT' } = req.query;
+
+  // Si pas encore d'historique, on fetch maintenant
+  if (!priceHistory.has(symbol) || priceHistory.get(symbol).length < 2) {
+    const tickers = await fetchAllExchanges(symbol, EXCHANGE_IDS);
+    recordPrices(symbol, tickers);
+  }
+
+  const hist = priceHistory.get(symbol) || [];
+  res.json({ symbol, history: hist });
+});
+
+// POST /api/scan
 app.post('/api/scan', async (req, res) => {
   const {
-    minSpread = 0.5,
+    minSpread = 0.05,
     capital   = 1000,
     pairs     = SPOT_PAIRS.slice(0, 6),
     exchanges = EXCHANGE_IDS,
   } = req.body;
 
+  const t0 = Date.now();
   try {
-    // Fetch tous les prix en parallèle (par paires)
     const allOpportunities = [];
 
     const pairResults = await Promise.allSettled(
@@ -185,31 +237,25 @@ app.post('/api/scan', async (req, res) => {
       if (r.status === 'fulfilled') allOpportunities.push(...r.value);
     }
 
-    // Trier global par profit net
     allOpportunities.sort((a, b) => b.netProfit - a.netProfit);
 
-    // Stats résumé
     const stats = {
-      scannedPairs:    pairs.length,
+      scannedPairs:     pairs.length,
       scannedExchanges: exchanges.length,
-      totalSignals:    allOpportunities.length,
-      bestSpread:      allOpportunities[0]?.spreadPct ?? 0,
-      totalNetProfit:  allOpportunities.reduce((s, o) => s + o.netProfit, 0).toFixed(2),
-      scanDurationMs:  0, // rempli ci-dessous
+      totalSignals:     allOpportunities.length,
+      bestSpread:       allOpportunities[0]?.spreadPct ?? 0,
+      bestPair:         allOpportunities[0]?.symbol ?? '—',
+      bestRoute:        allOpportunities[0]
+        ? `${allOpportunities[0].buyExchange} → ${allOpportunities[0].sellExchange}` : '—',
+      totalNetProfit:   allOpportunities.reduce((s, o) => s + o.netProfit, 0).toFixed(2),
+      scanDurationMs:   Date.now() - t0,
     };
 
-    res.json({ opportunities: allOpportunities.slice(0, 20), stats });
+    res.json({ opportunities: allOpportunities.slice(0, 25), stats });
   } catch (err) {
     console.error('Scan error:', err.message);
     res.status(500).json({ error: err.message });
   }
-});
-
-// GET /api/prices — prix live de toutes les paires sur tous les exchanges
-app.get('/api/prices', async (req, res) => {
-  const { symbol = 'BTC/USDT' } = req.query;
-  const tickers = await fetchAllExchanges(symbol, EXCHANGE_IDS);
-  res.json({ symbol, tickers, ts: Date.now() });
 });
 
 // ── START ─────────────────────────────────────────────────────────────────────
