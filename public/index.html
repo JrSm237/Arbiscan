@@ -182,6 +182,32 @@
   .skeleton { background:linear-gradient(90deg,var(--surface) 25%,var(--card) 50%,var(--surface) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; height:68px; }
   @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
 
+  /* ALERT PANEL */
+  .alert-panel { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px; }
+  .alert-status-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+  .alert-stat { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px 14px; }
+  .alert-stat-lbl { font-family:var(--mono); font-size:.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; margin-bottom:4px; }
+  .alert-stat-val { font-family:var(--mono); font-size:.95rem; font-weight:700; color:var(--green); }
+  .setup-steps { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+  .step { display:flex; gap:12px; align-items:flex-start; }
+  .step-num { width:24px; height:24px; border-radius:50%; background:rgba(0,245,160,.15); border:1px solid var(--green); color:var(--green); font-family:var(--mono); font-size:.7rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px; }
+  .step-content { font-size:.82rem; line-height:1.6; color:var(--text); }
+  .step-content code { font-family:var(--mono); font-size:.75rem; background:var(--card); padding:2px 6px; border-radius:3px; color:var(--green); border:1px solid var(--border); }
+  .input-row { display:flex; gap:8px; align-items:center; margin-top:6px; }
+  .input-row input { flex:1; font-family:var(--mono); font-size:.78rem; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 10px; outline:none; }
+  .input-row input:focus { border-color:var(--green); }
+  .btn-test { font-family:var(--mono); font-size:.75rem; background:var(--green); color:#0A0E1A; border:none; border-radius:6px; padding:8px 14px; cursor:pointer; font-weight:700; white-space:nowrap; transition:opacity .2s; }
+  .btn-test:hover { opacity:.85; }
+  .btn-test:disabled { opacity:.4; cursor:not-allowed; }
+  .alert-log { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px; font-family:var(--mono); font-size:.72rem; color:var(--muted); min-height:80px; max-height:200px; overflow-y:auto; line-height:1.8; }
+  .log-line { display:flex; gap:8px; }
+  .log-time { color:var(--muted); flex-shrink:0; }
+  .log-ok { color:var(--green); }
+  .log-err { color:var(--orange); }
+  .log-info { color:var(--blue); }
+  .tg-preview { background:#17212B; border-radius:8px; padding:14px 16px; font-family:monospace; font-size:.78rem; line-height:1.8; color:#fff; margin-top:10px; border:1px solid #2B5278; }
+  .tg-header { color:#64B5F6; font-weight:700; margin-bottom:6px; font-size:.8rem; }
+
   footer { padding:12px 28px; border-top:1px solid var(--border); font-size:.68rem; color:var(--muted); text-align:center; }
 </style>
 </head>
@@ -218,6 +244,7 @@
   <div class="tab active" onclick="switchTab('signals')">⬡ Signaux</div>
   <div class="tab" onclick="switchTab('charts')">◈ Graphiques</div>
   <div class="tab" onclick="switchTab('prices')">≡ Prix par exchange</div>
+  <div class="tab" onclick="switchTab('alerts')">🔔 Alertes Telegram</div>
 </div>
 
 <div class="app">
@@ -389,6 +416,97 @@
         </div>
       </div>
     </div>
+    <!-- TAB: ALERTS -->
+    <div class="tab-panel" id="panel-alerts">
+      <div style="width:100%;display:flex;flex-direction:column;gap:16px">
+
+        <!-- Statut scanner auto -->
+        <div class="alert-panel">
+          <div class="section-title">Statut du scanner automatique</div>
+          <div class="alert-status-row" id="alertStatusRow">
+            <div class="alert-stat"><div class="alert-stat-lbl">Scanner</div><div class="alert-stat-val" id="asScannerStatus">—</div></div>
+            <div class="alert-stat"><div class="alert-stat-lbl">Telegram</div><div class="alert-stat-val" id="asTelegramStatus">—</div></div>
+            <div class="alert-stat"><div class="alert-stat-lbl">Dernier scan auto</div><div class="alert-stat-val" id="asLastScan">—</div></div>
+            <div class="alert-stat"><div class="alert-stat-lbl">Seuil alerte</div><div class="alert-stat-val" id="asThreshold">—</div></div>
+          </div>
+          <div class="section-title" style="margin-top:8px">Derniers signaux détectés (auto)</div>
+          <div id="asLastSignals" style="font-family:var(--mono);font-size:.75rem;color:var(--muted)">Chargement…</div>
+        </div>
+
+        <!-- Configuration Telegram -->
+        <div class="alert-panel">
+          <div class="section-title">Configuration Telegram</div>
+          <div class="setup-steps">
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                Ouvre Telegram et cherche <code>@BotFather</code>. Envoie <code>/newbot</code> et suis les instructions. Tu recevras un <strong>token</strong> de la forme <code>123456:ABC-xxxx</code>.
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                Crée un groupe Telegram (ou utilise ton compte perso). Ajoute ton bot au groupe. Pour récupérer le <strong>Chat ID</strong> du groupe : cherche <code>@userinfobot</code> et transfère-lui un message du groupe. Tu verras l'ID (commence par <code>-100</code> pour les groupes).
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                Dans Render → ton service → <strong>Environment</strong>, ajoute ces variables :
+                <br><code>TELEGRAM_BOT_TOKEN</code> = ton token
+                <br><code>TELEGRAM_CHAT_ID</code> = ton chat ID
+                <br><code>ALERT_SPREAD</code> = <code>2.0</code> (seuil en %)
+                <br><code>SCAN_INTERVAL</code> = <code>60000</code> (60 secondes)
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">4</div>
+              <div class="step-content">
+                Teste la connexion avec le bouton ci-dessous. Si ça fonctionne, tu recevras un message de confirmation sur Telegram.
+              </div>
+            </div>
+          </div>
+
+          <button class="btn-test" id="testBtn" onclick="testTelegram()">
+            📨 Envoyer message de test
+          </button>
+          <div id="testResult" style="margin-top:8px;font-family:var(--mono);font-size:.75rem;display:none"></div>
+        </div>
+
+        <!-- Aperçu du message -->
+        <div class="alert-panel">
+          <div class="section-title">Aperçu du message Telegram</div>
+          <div class="tg-preview">
+            <div class="tg-header">🤖 ArbiScan Bot</div>
+🚨 <strong>SIGNAL D'ARBITRAGE DÉTECTÉ</strong>
+
+💎 <strong>Paire :</strong> <span style="color:#64B5F6">BTC/USDT</span>
+📈 <strong>Spread :</strong> <span style="color:#4CAF50">+2.34%</span>
+💰 <strong>Profit net :</strong> <span style="color:#4CAF50">+21.40 USDT</span>
+🏦 <strong>Capital utilisé :</strong> 1000 USDT
+
+🔽 <strong>Acheter sur :</strong> <span style="color:#64B5F6">kraken</span> à $93 850.00
+🔼 <strong>Vendre sur :</strong> <span style="color:#64B5F6">binance</span> à $96 047.90
+
+⏱ <strong>Fenêtre :</strong> 55s  |  🎯 <strong>Confiance :</strong> 78%
+⚠️ <strong>Risque :</strong> 🟡 MOYEN
+
+🕐 <em>14:32:17 (Paris)</em>
+<em>ArbiScan — arbiscan-f4fk.onrender.com</em>
+          </div>
+        </div>
+
+        <!-- Log des alertes -->
+        <div class="alert-panel">
+          <div class="section-title">Journal des alertes</div>
+          <div class="alert-log" id="alertLog">
+            <div class="log-line"><span class="log-time">--:--:--</span><span class="log-info">En attente du premier scan…</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -444,13 +562,14 @@ function toggleExchange(id) {
 // ── TABS ─────────────────────────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const names = ['signals','charts','prices'];
+    const names = ['signals','charts','prices','alerts'];
     t.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(`panel-${name}`).classList.add('active');
   if (name === 'charts') loadChart();
   if (name === 'prices') loadPriceTable();
+  if (name === 'alerts') loadAlertStatus();
 }
 
 // ── SCAN ────────────────────────────────────────────────────────────────────
@@ -745,10 +864,92 @@ function toggleAutoScan(on) {
   if (on) { runScan(); autoTimer = setInterval(runScan, 30000); }
 }
 
+// ── ALERTES TELEGRAM ────────────────────────────────────────────────────────
+async function loadAlertStatus() {
+  try {
+    const resp = await fetch('/api/status');
+    const data = await resp.json();
+
+    document.getElementById('asScannerStatus').textContent  = data.autoScanActive ? '✅ Actif' : '❌ Inactif';
+    document.getElementById('asScannerStatus').style.color  = data.autoScanActive ? 'var(--green)' : 'var(--orange)';
+    document.getElementById('asTelegramStatus').textContent = data.telegramConfigured ? '✅ Configuré' : '⚠ Non configuré';
+    document.getElementById('asTelegramStatus').style.color = data.telegramConfigured ? 'var(--green)' : 'var(--yellow)';
+    document.getElementById('asThreshold').textContent      = `Spread > ${data.alertThreshold}%`;
+
+    if (data.lastScanTime) {
+      const d = new Date(data.lastScanTime);
+      document.getElementById('asLastScan').textContent = d.toLocaleTimeString('fr-FR');
+    }
+
+    const sigEl = document.getElementById('asLastSignals');
+    if (data.lastTopSignals && data.lastTopSignals.length) {
+      sigEl.innerHTML = data.lastTopSignals.map(s =>
+        `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text)">${s.symbol}</span>
+          <span>${s.buyExchange} → ${s.sellExchange}</span>
+          <span style="color:var(--green);font-weight:700">+${s.spreadPct?.toFixed(2)}%</span>
+          <span style="color:var(--muted)">+${s.netProfit?.toFixed(2)} USDT</span>
+        </div>`
+      ).join('');
+    } else {
+      sigEl.textContent = 'Aucun signal détecté lors du dernier scan auto.';
+    }
+  } catch(e) {
+    document.getElementById('asLastSignals').textContent = 'Impossible de charger le statut.';
+  }
+}
+
+async function testTelegram() {
+  const btn = document.getElementById('testBtn');
+  const res = document.getElementById('testResult');
+  btn.disabled = true;
+  btn.textContent = '⏳ Envoi…';
+  res.style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/alert/test', { method:'POST', headers:{'Content-Type':'application/json'} });
+    const data = await resp.json();
+
+    res.style.display = 'block';
+    if (data.success) {
+      res.style.color = 'var(--green)';
+      res.textContent = '✅ Message envoyé ! Vérifie ton Telegram.';
+      addLog('Message de test Telegram envoyé avec succès', 'ok');
+    } else {
+      res.style.color = 'var(--orange)';
+      res.textContent = '❌ ' + (data.message || 'Échec — vérifiez vos variables d'environnement dans Render.');
+      addLog('Échec envoi test Telegram : ' + data.message, 'err');
+    }
+  } catch(e) {
+    res.style.display = 'block';
+    res.style.color = 'var(--orange)';
+    res.textContent = '❌ Erreur réseau : ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📨 Envoyer message de test';
+  }
+}
+
+function addLog(msg, type = 'info') {
+  const log  = document.getElementById('alertLog');
+  const time = new Date().toLocaleTimeString('fr-FR');
+  const div  = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${msg}</span>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  // Limiter à 50 lignes
+  while (log.children.length > 50) log.removeChild(log.firstChild);
+}
+
+// Intercepter les scans pour logger les alertes
+const _origRenderSignals = window.renderSignals;
+
 // ── INIT ─────────────────────────────────────────────────────────────────────
 buildTicker();
 buildExchangeToggles();
 </script>
 </body>
 </html>
+
 
