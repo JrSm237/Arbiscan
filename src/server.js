@@ -77,7 +77,7 @@ function findArbitrageOpportunities(tickers, minSpreadPct = 0.5, capital = 1000)
       if (!buyer.ask || !seller.bid) continue;
 
       const spreadPct = ((seller.bid - buyer.ask) / buyer.ask) * 100;
-     if (spreadPct < minSpreadPct) continue;
+    if (spreadPct < 0.05) continue; // seuil absolu très bas
 
      // Estimation frais de trading (0.1% par leg = 0.2% aller-retour)
 const feePct    = 0.2;
