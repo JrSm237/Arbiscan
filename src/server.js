@@ -74,17 +74,21 @@ function findArbitrageOpportunities(tickers, minSpreadPct = 0.5, capital = 1000)
       const buyer  = tickers[i]; // acheter ici (ask bas)
       const seller = tickers[j]; // vendre ici  (bid haut)
 
-      if (!buyer.ask || !seller.bid) continue;
+      // Utiliser last si bid/ask non disponibles
+      const buyPrice  = buyer.ask  || buyer.last;
+      const sellPrice = seller.bid || seller.last;
 
-      const spreadPct = ((seller.bid - buyer.ask) / buyer.ask) * 100;
-    if (spreadPct < 0.05) continue; // seuil absolu très bas
+      if (!buyPrice || !sellPrice) continue;
 
-     // Estimation frais de trading (0.1% par leg = 0.2% aller-retour)
-const feePct    = 0.2;
-const netSpread = spreadPct - feePct;
-// On garde même les signaux légèrement négatifs pour info
-      const units      = capital / buyer.ask;
-      const grossProfit = units * (seller.bid - buyer.ask);
+      const spreadPct = ((sellPrice - buyPrice) / buyPrice) * 100;
+      if (spreadPct < 0.05) continue; // seuil absolu très bas
+
+      // Estimation frais de trading (0.1% par leg = 0.2% aller-retour)
+      const feePct    = 0.2;
+      const netSpread = spreadPct - feePct;
+
+      const units       = capital / buyPrice;
+      const grossProfit = units * (sellPrice - buyPrice);
       const fees        = capital * (feePct / 100);
       const netProfit   = grossProfit - fees;
 
@@ -103,8 +107,8 @@ const netSpread = spreadPct - feePct;
         symbol:        buyer.symbol,
         buyExchange:   buyer.exchange,
         sellExchange:  seller.exchange,
-        buyPrice:      buyer.ask,
-        sellPrice:     seller.bid,
+        buyPrice,
+        sellPrice,
         spreadPct:     parseFloat(spreadPct.toFixed(3)),
         netSpreadPct:  parseFloat(netSpread.toFixed(3)),
         grossProfit:   parseFloat(grossProfit.toFixed(2)),
