@@ -22,7 +22,6 @@ function markAlerted(key) {
 
 // Formate un beau message Telegram (Markdown)
 function formatSignalMessage(opp) {
-  const risk = opp.risk === 'low' ? '🟢 FAIBLE' : opp.risk === 'medium' ? '🟡 MOYEN' : '🔴 ÉLEVÉ';
   const time = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris' });
 
   return `🚨 *SIGNAL D'ARBITRAGE DÉTECTÉ*
@@ -30,13 +29,11 @@ function formatSignalMessage(opp) {
 💎 *Paire :* \`${opp.symbol}\`
 📈 *Spread :* \`+${opp.spreadPct.toFixed(2)}%\`
 💰 *Profit net :* \`+${opp.netProfit.toFixed(2)} USDT\`
-🏦 *Capital utilisé :* \`${opp.capital} USDT\`
+🏦 *Capital :* \`${opp.capital} USDT\`
 
 🔽 *Acheter sur :* \`${opp.buyExchange}\` à $${formatPrice(opp.buyPrice)}
 🔼 *Vendre sur :* \`${opp.sellExchange}\` à $${formatPrice(opp.sellPrice)}
 
-⏱ *Fenêtre :* ${opp.windowSec}s  |  🎯 *Confiance :* ${opp.confidence}%
-⚠️ *Risque :* ${risk}
 
 🕐 _${time} (Paris)_
 _ArbiScan — arbiscan-f4fk.onrender.com_`;
