@@ -62,8 +62,8 @@
     flex-shrink:0;
   }
   .tab.active { color:var(--green); border-bottom-color:var(--green); }
-  .tab-panel { display:none; }
-  .tab-panel.active { display:flex; }
+  .tab-panel { display:none !important; }
+  .tab-panel.active { display:flex !important; }
 
   /* ── LAYOUT ── */
   .app { display:grid; grid-template-columns:240px 1fr; min-height:calc(100vh - 120px); }
@@ -712,12 +712,22 @@ function toggleExchange(id) {
 
 // ── TABS ─────────────────────────────────────────────────────────────────────
 function switchTab(name) {
+  const names = ['signals','charts','prices','alerts'];
+  // Mettre à jour les onglets
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const names = ['signals','charts','prices','alerts'];
     t.classList.toggle('active', names[i] === name);
   });
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById(`panel-${name}`).classList.add('active');
+  // Cacher tous les panels avec style inline (plus fiable)
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.remove('active');
+    p.style.display = 'none';
+  });
+  // Afficher le panel actif
+  const activePanel = document.getElementById('panel-' + name);
+  if (activePanel) {
+    activePanel.classList.add('active');
+    activePanel.style.display = 'flex';
+  }
   if (name === 'charts') loadChart();
   if (name === 'prices') loadPriceTable();
   if (name === 'alerts') loadAlertStatus();
@@ -1100,6 +1110,11 @@ const _origRenderSignals = window.renderSignals;
 // ── INIT ─────────────────────────────────────────────────────────────────────
 buildTicker();
 buildExchangeToggles();
+// Init panels: cacher tout sauf signals
+document.querySelectorAll('.tab-panel').forEach(p => {
+  p.style.display = p.id === 'panel-signals' ? 'flex' : 'none';
+});
 </script>
 </body>
 </html>
+
