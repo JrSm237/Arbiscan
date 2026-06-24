@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArbiScan — Signaux d'Arbitrage Crypto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0A0E1A;
+    --surface: #111827;
+    --card:    #0F1929;
+    --border:  #1E2D40;
+    --green:   #00F5A0;
+    --orange:  #FF6B35;
+    --blue:    #3B82F6;
+    --yellow:  #F59E0B;
+    --muted:   #8892A4;
+    --text:    #E2E8F0;
+    --mono:    'JetBrains Mono', monospace;
+    --sans:    'Inter', sans-serif;
+  }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; overflow-x:hidden; }
+
+  /* HEADER */
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px; border-bottom:1px solid var(--border);
+    background:rgba(10,14,26,.95); backdrop-filter:blur(12px);
+    position:sticky; top:0; z-index:100;
+  }
+  .logo { font-family:var(--mono); font-size:1rem; font-weight:700; color:var(--green); letter-spacing:.08em; display:flex; align-items:center; gap:8px; }
+  .logo-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse-dot 2s infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .hstats { display:flex; gap:20px; }
+  .hstat { display:flex; flex-direction:column; align-items:flex-end; }
+  .hstat-lbl { font-family:var(--mono); font-size:.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; }
+  .hstat-val { font-family:var(--mono); font-size:.85rem; font-weight:700; color:var(--green); }
+  .status-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); display:inline-block; margin-right:5px; }
+  .status-dot.live { background:var(--green); animation:pulse-dot 1.5s infinite; }
+
+  /* TICKER */
+  .ticker-bar { border-bottom:1px solid var(--border); padding:8px 0; overflow:hidden; background:var(--surface); }
+  .ticker-track { display:flex; gap:40px; animation:ticker 35s linear infinite; width:max-content; }
+  @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  .tick { font-family:var(--mono); font-size:.72rem; color:var(--muted); display:flex; gap:6px; white-space:nowrap; }
+  .tick-sym { color:var(--text); font-weight:500; }
+  .up { color:var(--green); } .dn { color:var(--orange); }
+
+  /* LAYOUT */
+  .app { display:grid; grid-template-columns:280px 1fr; min-height:calc(100vh - 88px); }
+  @media(max-width:900px){ .app{grid-template-columns:1fr} .sidebar{display:none} }
+
+  /* SIDEBAR */
+  .sidebar { border-right:1px solid var(--border); padding:20px 16px; display:flex; flex-direction:column; gap:20px; overflow-y:auto; }
+  .sb-section { display:flex; flex-direction:column; gap:8px; }
+  .sb-title { font-family:var(--mono); font-size:.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; margin-bottom:4px; }
+  label { font-size:.8rem; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+  select, input[type=range], input[type=number] {
+    font-family:var(--mono); font-size:.78rem;
+    background:var(--card); color:var(--text);
+    border:1px solid var(--border); border-radius:6px;
+    padding:7px 10px; outline:none; width:100%;
+    transition:border-color .2s;
+  }
+  select:focus, input:focus { border-color:var(--green); }
+  input[type=range] { padding:4px 0; cursor:pointer; accent-color:var(--green); }
+
+  .exchange-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .ex-toggle {
+    display:flex; align-items:center; gap:6px;
+    font-family:var(--mono); font-size:.72rem; color:var(--muted);
+    background:var(--card); border:1px solid var(--border); border-radius:5px;
+    padding:6px 8px; cursor:pointer; transition:all .2s; user-select:none;
+  }
+  .ex-toggle.active { border-color:var(--green); color:var(--green); background:rgba(0,245,160,.07); }
+  .ex-dot { width:6px; height:6px; border-radius:50%; background:var(--border); flex-shrink:0; }
+  .ex-toggle.active .ex-dot { background:var(--green); }
+
+  .btn-scan {
+    width:100%; padding:12px; border:none; border-radius:8px;
+    background:var(--green); color:#0A0E1A;
+    font-family:var(--mono); font-size:.85rem; font-weight:700;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:opacity .2s;
+  }
+  .btn-scan:hover { opacity:.88; }
+  .btn-scan:disabled { opacity:.4; cursor:not-allowed; }
+  .spinner { width:14px; height:14px; border:2px solid rgba(0,0,0,.2); border-top-color:#0A0E1A; border-radius:50%; animation:spin .7s linear infinite; display:none; }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .btn-scan.loading .spinner { display:block; }
+  .btn-scan.loading .btn-ico { display:none; }
+
+  /* MAIN */
+  .main { padding:24px 28px; display:flex; flex-direction:column; gap:20px; overflow-y:auto; }
+
+  /* STAT CARDS */
+  .stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  @media(max-width:700px){ .stat-row{grid-template-columns:1fr 1fr} }
+  .stat-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:14px 16px;
+  }
+  .stat-card-lbl { font-family:var(--mono); font-size:.62rem; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; margin-bottom:6px; }
+  .stat-card-val { font-family:var(--mono); font-size:1.4rem; font-weight:700; color:var(--green); }
+  .stat-card-sub { font-family:var(--mono); font-size:.65rem; color:var(--muted); margin-top:3px; }
+
+  /* PRICE TABLE */
+  .section-title {
+    font-family:var(--mono); font-size:.68rem; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.14em;
+    display:flex; align-items:center; gap:10px; margin-bottom:12px;
+  }
+  .section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .price-table { width:100%; border-collapse:collapse; }
+  .price-table th {
+    font-family:var(--mono); font-size:.62rem; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.1em;
+    text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);
+  }
+  .price-table td { padding:9px 10px; border-bottom:1px solid rgba(30,45,64,.5); font-family:var(--mono); font-size:.78rem; }
+  .price-table tr:hover td { background:rgba(255,255,255,.02); }
+  .price-table tr.best td:first-child { border-left:2px solid var(--green); }
+
+  /* SIGNALS */
+  .signals-grid { display:flex; flex-direction:column; gap:10px; }
+  .sig-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:16px; display:grid;
+    grid-template-columns:auto 1fr auto auto;
+    gap:14px; align-items:center;
+    animation:slide-in .3s ease both;
+    transition:border-color .2s, transform .15s;
+    cursor:default;
+  }
+  .sig-card:hover { border-color:rgba(0,245,160,.4); transform:translateX(2px); }
+  @keyframes slide-in{ from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+  .badge {
+    font-family:var(--mono); font-size:.6rem; font-weight:700;
+    padding:4px 8px; border-radius:4px; letter-spacing:.08em; white-space:nowrap;
+    align-self:flex-start;
+  }
+  .badge-low  { background:rgba(59,130,246,.12);  color:var(--blue);   border:1px solid rgba(59,130,246,.25); }
+  .badge-med  { background:rgba(245,158,11,.12);  color:var(--yellow); border:1px solid rgba(245,158,11,.25); }
+  .badge-high { background:rgba(255,107,53,.12);  color:var(--orange); border:1px solid rgba(255,107,53,.25); }
+
+  .sig-pair { font-family:var(--mono); font-weight:700; font-size:.92rem; margin-bottom:4px; }
+  .sig-route { font-family:var(--mono); font-size:.7rem; color:var(--muted); }
+  .sig-route .ex { color:var(--text); }
+  .sig-route .arrow { color:var(--green); }
+
+  .sig-prices { text-align:right; }
+  .sig-buy  { font-family:var(--mono); font-size:.72rem; color:var(--orange); }
+  .sig-sell { font-family:var(--mono); font-size:.72rem; color:var(--green); }
+
+  .sig-profit { text-align:right; }
+  .sig-pct { font-family:var(--mono); font-weight:700; font-size:1.05rem; color:var(--green); }
+  .sig-net { font-family:var(--mono); font-size:.7rem; color:var(--muted); }
+  .sig-conf { font-family:var(--mono); font-size:.65rem; color:var(--muted); margin-top:2px; }
+
+  /* CONFIDENCE BAR */
+  .conf-bar { width:48px; height:3px; background:var(--border); border-radius:2px; margin-top:4px; }
+  .conf-fill { height:100%; border-radius:2px; background:var(--green); }
+
+  /* EMPTY */
+  .empty { padding:48px; text-align:center; font-family:var(--mono); font-size:.8rem; color:var(--muted); display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .empty-icon { font-size:2.5rem; opacity:.25; }
+
+  /* ERROR */
+  .error-box { background:rgba(255,107,53,.08); border:1px solid rgba(255,107,53,.25); border-radius:8px; padding:14px 16px; font-family:var(--mono); font-size:.78rem; color:var(--orange); }
+
+  /* LOADING SKELETON */
+  .skeleton { background:linear-gradient(90deg,var(--surface) 25%,var(--card) 50%,var(--surface) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; height:72px; }
+  @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+
+  footer { padding:12px 28px; border-top:1px solid var(--border); font-size:.68rem; color:var(--muted); text-align:center; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>ARBISCAN</div>
+  <div class="hstats">
+    <div class="hstat">
+      <span class="hstat-lbl">Status</span>
+      <span class="hstat-val"><span class="status-dot" id="statusDot"></span><span id="statusTxt">Hors ligne</span></span>
+    </div>
+    <div class="hstat">
+      <span class="hstat-lbl">Exchanges</span>
+      <span class="hstat-val" id="hExCount">—</span>
+    </div>
+    <div class="hstat">
+      <span class="hstat-lbl">Signaux</span>
+      <span class="hstat-val" id="hSigCount">—</span>
+    </div>
+    <div class="hstat">
+      <span class="hstat-lbl">Dernier scan</span>
+      <span class="hstat-val" id="hLastScan">—</span>
+    </div>
+  </div>
+</header>
+
+<div class="ticker-bar">
+  <div class="ticker-track" id="ticker"></div>
+</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-section">
+      <div class="sb-title">Paramètres du scan</div>
+
+      <label>
+        Spread minimum
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="range" id="minSpread" min="0.1" max="5" step="0.1" value="0.5" oninput="document.getElementById('spreadVal').textContent=this.value+'%'">
+          <span id="spreadVal" style="font-family:var(--mono);font-size:.75rem;color:var(--green);white-space:nowrap">0.5%</span>
+        </div>
+      </label>
+
+      <label>
+        Capital (USDT)
+        <input type="number" id="capital" value="1000" min="100" max="100000" step="100">
+      </label>
+
+      <label>
+        Paires à scanner
+        <select id="pairCount">
+          <option value="4">Top 4 (plus rapide)</option>
+          <option value="8" selected>Top 8</option>
+          <option value="12">Toutes (12 paires)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Exchanges actifs</div>
+      <div class="exchange-grid" id="exchangeToggles"></div>
+    </div>
+
+    <button class="btn-scan" id="scanBtn" onclick="runScan()">
+      <span class="btn-ico">⬡ Lancer le scan</span>
+      <span class="spinner"></span>
+    </button>
+
+    <div class="sb-section">
+      <div class="sb-title">Auto-scan</div>
+      <label style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="autoScan" onchange="toggleAutoScan(this.checked)" style="accent-color:var(--green);width:auto">
+        <span>Toutes les 30 secondes</span>
+      </label>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+    <!-- STAT CARDS -->
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-card-lbl">Meilleur spread</div>
+        <div class="stat-card-val" id="sBestSpread">—</div>
+        <div class="stat-card-sub" id="sBestPair">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-lbl">Profit max net</div>
+        <div class="stat-card-val" id="sBestProfit">—</div>
+        <div class="stat-card-sub" id="sBestRoute">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-lbl">Total signaux</div>
+        <div class="stat-card-val" id="sTotalSigs">—</div>
+        <div class="stat-card-sub" id="sScanTime">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-lbl">Paires scannées</div>
+        <div class="stat-card-val" id="sPairs">—</div>
+        <div class="stat-card-sub" id="sExchanges">—</div>
+      </div>
+    </div>
+
+    <!-- SIGNALS -->
+    <div>
+      <div class="section-title">Opportunités d'arbitrage</div>
+      <div class="signals-grid" id="signalsList">
+        <div class="empty">
+          <div class="empty-icon">◎</div>
+          Configurez les paramètres et lancez un scan pour voir les opportunités en temps réel.
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<footer>
+  ⚠ ArbiScan affiche des données de marché réelles via CCXT. Les signaux sont à titre informatif uniquement — pas de conseils financiers. L'arbitrage crypto comporte des risques réels (slippage, frais de retrait, délais de transfert).
+</footer>
+
+<script>
+const API = ''; // même origine
+
+// ── EXCHANGES ──────────────────────────────────────────────────────────────
+const EXCHANGES = ['binance','bybit','okx','kraken','kucoin','gate'];
+let activeExchanges = new Set(EXCHANGES);
+let autoTimer = null;
+
+function buildExchangeToggles() {
+  const el = document.getElementById('exchangeToggles');
+  el.innerHTML = EXCHANGES.map(id => `
+    <div class="ex-toggle active" id="ex-${id}" onclick="toggleExchange('${id}')">
+      <div class="ex-dot"></div>${id}
+    </div>`).join('');
+}
+
+function toggleExchange(id) {
+  const el = document.getElementById(`ex-${id}`);
+  if (activeExchanges.has(id)) {
+    if (activeExchanges.size <= 2) return; // minimum 2
+    activeExchanges.delete(id);
+    el.classList.remove('active');
+  } else {
+    activeExchanges.add(id);
+    el.classList.add('active');
+  }
+}
+
+// ── TICKER ──────────────────────────────────────────────────────────────────
+const TICK_DATA = [
+  ['BTC','94 200','▲','0.42%'],['ETH','3 280','▲','0.91%'],
+  ['BNB','612','▼','0.18%'],['SOL','172','▲','1.34%'],
+  ['XRP','0.618','▲','0.55%'],['DOGE','0.185','▼','0.72%'],
+  ['ADA','0.512','▲','0.29%'],['MATIC','0.901','▼','0.15%'],
+];
+function buildTicker() {
+  const t = document.getElementById('ticker');
+  const items = [...TICK_DATA,...TICK_DATA].map(([s,p,d,c])=>
+    `<div class="tick"><span class="tick-sym">${s}/USDT</span><span>${p}</span>
+     <span class="${d==='▲'?'up':'dn'}">${d} ${c}</span></div>`).join('');
+  t.innerHTML = items;
+}
+
+// ── SCAN ────────────────────────────────────────────────────────────────────
+async function runScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true; btn.classList.add('loading');
+
+  setStatus('Scan en cours…', false);
+  showSkeletons();
+
+  const t0 = Date.now();
+  try {
+    const minSpread = parseFloat(document.getElementById('minSpread').value);
+    const capital   = parseFloat(document.getElementById('capital').value);
+    const pairCount = parseInt(document.getElementById('pairCount').value);
+    const exchanges = [...activeExchanges];
+
+    const resp = await fetch(`${API}/api/scan`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ minSpread, capital, exchanges,
+        pairs: ['BTC/USDT','ETH/USDT','BNB/USDT','SOL/USDT',
+                'XRP/USDT','ADA/USDT','DOGE/USDT','AVAX/USDT',
+                'MATIC/USDT','LINK/USDT','DOT/USDT','LTC/USDT'].slice(0, pairCount)
+      }),
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    const elapsed = Date.now() - t0;
+
+    renderStats(data.stats, elapsed);
+    renderSignals(data.opportunities);
+    setStatus('En direct', true);
+    document.getElementById('hLastScan').textContent = new Date().toLocaleTimeString('fr');
+    document.getElementById('hSigCount').textContent = data.stats.totalSignals;
+    document.getElementById('hExCount').textContent  = exchanges.length;
+
+  } catch (err) {
+    showError(err.message);
+    setStatus('Erreur', false);
+  } finally {
+    btn.disabled = false; btn.classList.remove('loading');
+  }
+}
+
+function setStatus(txt, live) {
+  document.getElementById('statusTxt').textContent = txt;
+  document.getElementById('statusDot').className = 'status-dot' + (live ? ' live' : '');
+}
+
+function showSkeletons() {
+  document.getElementById('signalsList').innerHTML =
+    Array(4).fill('<div class="skeleton"></div>').join('');
+}
+
+function showError(msg) {
+  document.getElementById('signalsList').innerHTML =
+    `<div class="error-box">⚠ Erreur lors du scan : ${msg}<br>Vérifiez que le serveur est démarré sur le bon port.</div>`;
+}
+
+function renderStats(stats, elapsed) {
+  document.getElementById('sBestSpread').textContent = stats.bestSpread ? stats.bestSpread.toFixed(2)+'%' : '—';
+  document.getElementById('sBestProfit').textContent = stats.totalNetProfit ? '+'+stats.totalNetProfit+' USDT' : '—';
+  document.getElementById('sTotalSigs').textContent  = stats.totalSignals;
+  document.getElementById('sPairs').textContent      = stats.scannedPairs;
+  document.getElementById('sScanTime').textContent   = `En ${(elapsed/1000).toFixed(1)}s`;
+  document.getElementById('sExchanges').textContent  = stats.scannedExchanges + ' exchanges';
+}
+
+function renderSignals(opps) {
+  const el = document.getElementById('signalsList');
+  if (!opps || !opps.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">◎</div>
+      Aucune opportunité trouvée avec ce spread minimum.<br>Essayez de réduire le spread ou d'ajouter plus d'exchanges.</div>`;
+    return;
+  }
+
+  el.innerHTML = opps.map((o, i) => {
+    const riskClass = o.risk === 'low' ? 'badge-low' : o.risk === 'medium' ? 'badge-med' : 'badge-high';
+    const riskLabel = o.risk === 'low' ? 'FAIBLE' : o.risk === 'medium' ? 'MOYEN' : 'ÉLEVÉ';
+    const confW = Math.round(o.confidence);
+    return `
+    <div class="sig-card" style="animation-delay:${i*60}ms">
+      <div class="badge ${riskClass}">${riskLabel}</div>
+      <div>
+        <div class="sig-pair">${o.symbol}</div>
+        <div class="sig-route">
+          Acheter sur <span class="ex">${o.buyExchange}</span>
+          <span class="arrow"> → </span>
+          Vendre sur <span class="ex">${o.sellExchange}</span>
+          &nbsp;·&nbsp; ⏱ ${o.windowSec}s
+        </div>
+      </div>
+      <div class="sig-prices">
+        <div class="sig-buy">BUY $${fmt(o.buyPrice)}</div>
+        <div class="sig-sell">SELL $${fmt(o.sellPrice)}</div>
+      </div>
+      <div class="sig-profit">
+        <div class="sig-pct">+${o.spreadPct.toFixed(2)}%</div>
+        <div class="sig-net">+${o.netProfit.toFixed(2)} USDT net</div>
+        <div class="sig-conf">Confiance : ${confW}%</div>
+        <div class="conf-bar"><div class="conf-fill" style="width:${confW}%"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function fmt(n) {
+  if (!n) return '—';
+  if (n > 1000) return n.toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return n.toFixed(4);
+}
+
+function toggleAutoScan(on) {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  if (on) { runScan(); autoTimer = setInterval(runScan, 30000); }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+buildTicker();
+buildExchangeToggles();
+</script>
+</body>
+</html>
