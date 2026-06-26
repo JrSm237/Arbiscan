@@ -277,3 +277,213 @@ app.listen(PORT, async () => {
   }
 });
 
+// ── ROUTES MONÉTISATION ───────────────────────────────────────────────────────
+const { PLANS, initCinetPay, verifyCinetPay, getUSDTInstructions, verifyUSDTPayment } = require('./payments');
+const { upsertUser, activateSubscription, getUserByEmail, getActiveSubscribers } = require('./auth');
+const { generateToken, verifyToken, requireAuth, requirePremium, scanLimit } = require('./middleware');
+const cookieParser = require('cookie-parser');
+app.use(cookieParser());
+
+// GET /api/plans — liste des plans
+app.get('/api/plans', (req, res) => {
+  res.json({ plans: PLANS, currency: { primary: 'USDT', secondary: 'XAF (FCFA)' } });
+});
+
+// POST /api/auth/register — inscription
+app.post('/api/auth/register', async (req, res) => {
+  const { email, phone, name, telegram_id } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email requis' });
+
+  const user = await upsertUser({ email, phone, name, telegram_id });
+  if (!user) return res.status(500).json({ error: 'Erreur création compte' });
+
+  const token = generateToken(user);
+  res.cookie('token', token, { httpOnly: true, maxAge: 30 * 24 * 3600 * 1000 });
+  res.json({ success: true, token, user: { id: user.id, email, name } });
+});
+
+// POST /api/auth/login — connexion simple par email
+app.post('/api/auth/login', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email requis' });
+
+  const user = await getUserByEmail(email);
+  if (!user) return res.status(404).json({ error: 'Compte non trouvé. Inscrivez-vous d\'abord.' });
+
+  const token = generateToken(user);
+  res.cookie('token', token, { httpOnly: true, maxAge: 30 * 24 * 3600 * 1000 });
+  res.json({ success: true, token, user: { id: user.id, email: user.email, name: user.name } });
+});
+
+// GET /api/auth/me — profil utilisateur + statut premium
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  const { checkPremium } = require('./auth');
+  const isPremium = await checkPremium(req.user.id);
+  res.json({ user: req.user, premium: isPremium });
+});
+
+// POST /api/payments/cinetpay/init — initier paiement Mobile Money
+app.post('/api/payments/cinetpay/init', requireAuth, async (req, res) => {
+  const { plan = 'monthly' } = req.body;
+  const result = await initCinetPay({
+    plan,
+    userId: req.user.id,
+    email:  req.user.email,
+    phone:  req.body.phone || '',
+    name:   req.user.name || 'Client ArbiScan',
+  });
+  res.json(result);
+});
+
+// POST /api/payments/cinetpay/notify — webhook CinetPay (appelé automatiquement)
+app.post('/api/payments/cinetpay/notify', async (req, res) => {
+  const { transaction_id, status } = req.body;
+  if (status !== 'ACCEPTED') return res.json({ ok: false });
+
+  // Extraire userId depuis transactionId (ARB-userId-timestamp)
+  const parts  = (transaction_id || '').split('-');
+  const userId = parts[1];
+  if (!userId) return res.json({ ok: false });
+
+  const verify = await verifyCinetPay(transaction_id);
+  if (!verify.success) return res.json({ ok: false });
+
+  const ok = await activateSubscription(userId, {
+    plan:          'monthly',
+    paymentRef:    transaction_id,
+    paymentMethod: 'cinetpay',
+  });
+
+  if (ok) {
+    console.log(`✅ Abonnement activé — user ${userId} via CinetPay`);
+    // Envoyer message Telegram de confirmation
+    const { sendTelegram } = require('./telegram');
+    const sb = require('./auth').getSupabase();
+    if (sb) {
+      const { data } = await sb.from('users').select('telegram_id, name').eq('id', userId).single();
+      if (data?.telegram_id) {
+        await sendTelegram(`✅ *Paiement confirmé !*\n\nBonjour ${data.name || 'abonné'}, votre accès ArbiScan Premium est activé pour 30 jours.\n\n🚨 Vous recevrez désormais toutes les alertes d'arbitrage en temps réel.`);
+      }
+    }
+  }
+  res.json({ ok });
+});
+
+// GET /api/payments/usdt/instructions — instructions paiement USDT
+app.get('/api/payments/usdt/instructions', requireAuth, async (req, res) => {
+  const { plan = 'monthly' } = req.query;
+  const instructions = getUSDTInstructions(plan, req.user.id);
+  res.json(instructions);
+});
+
+// POST /api/payments/usdt/verify — vérifier hash de transaction USDT
+app.post('/api/payments/usdt/verify', requireAuth, async (req, res) => {
+  const { txHash, plan = 'monthly' } = req.body;
+  if (!txHash) return res.status(400).json({ error: 'Hash de transaction requis' });
+
+  const p      = PLANS[plan];
+  const result = await verifyUSDTPayment(txHash, p.usdt);
+
+  if (result.success) {
+    const ok = await activateSubscription(req.user.id, {
+      plan,
+      paymentRef:    txHash,
+      paymentMethod: 'usdt_trc20',
+    });
+    if (ok) {
+      console.log(`✅ Abonnement USDT activé — user ${req.user.id}`);
+      res.json({ success: true, message: 'Abonnement activé !' });
+    } else {
+      res.status(500).json({ error: 'Erreur activation abonnement' });
+    }
+  } else {
+    res.status(400).json({ error: result.error });
+  }
+});
+
+// POST /api/payments/usdt/manual — activation manuelle par admin
+app.post('/api/payments/usdt/manual', async (req, res) => {
+  const { adminKey, email, plan = 'monthly', txHash } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Clé admin invalide' });
+
+  const user = await getUserByEmail(email);
+  if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
+
+  const ok = await activateSubscription(user.id, {
+    plan,
+    paymentRef:    txHash || 'manual-' + Date.now(),
+    paymentMethod: 'usdt_manual',
+  });
+
+  res.json({ success: ok, message: ok ? `Abonnement ${plan} activé pour ${email}` : 'Erreur' });
+});
+
+// GET /api/admin/subscribers — liste des abonnés actifs (admin)
+app.get('/api/admin/subscribers', async (req, res) => {
+  const { adminKey } = req.query;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Accès refusé' });
+  const subs = await getActiveSubscribers();
+  res.json({ count: subs.length, subscribers: subs });
+});
+
+// ── ROUTES BOT D'EXÉCUTION ────────────────────────────────────────────────────
+const tradeBot = require('./tradeBot');
+
+// Démarrer le bot automatiquement si les clés API sont configurées
+if (process.env.OKX_API_KEY && process.env.HTX_API_KEY) {
+  console.log('🤖 Démarrage du bot d\'exécution...');
+  tradeBot.start().catch(console.error);
+} else {
+  console.log('⚠ Bot d\'exécution désactivé (clés API manquantes)');
+}
+
+// GET /api/bot/status — état du bot
+app.get('/api/bot/status', (req, res) => {
+  res.json(tradeBot.getState());
+});
+
+// POST /api/bot/start — démarrer le bot
+app.post('/api/bot/start', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Accès refusé' });
+  await tradeBot.start();
+  res.json({ success: true, message: 'Bot démarré' });
+});
+
+// POST /api/bot/stop — arrêter le bot
+app.post('/api/bot/stop', (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Accès refusé' });
+  tradeBot.stop();
+  res.json({ success: true, message: 'Bot arrêté' });
+});
+
+// GET /api/bot/trades — historique des trades
+app.get('/api/bot/trades', (req, res) => {
+  const state = tradeBot.getState();
+  res.json({
+    trades:        state.tradeHistory,
+    totalTrades:   state.totalTrades,
+    successTrades: state.successTrades,
+    failedTrades:  state.failedTrades,
+    totalPnL:      state.totalPnL,
+  });
+});
+
+// GET /api/bot/balances — balances des exchanges
+app.get('/api/bot/balances', async (req, res) => {
+  try {
+    const balances = await tradeBot.fetchBalances();
+    res.json(balances);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/bot/report — envoyer rapport hebdomadaire manuellement
+app.post('/api/bot/report', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Accès refusé' });
+  await tradeBot.sendWeeklyReport();
+  res.json({ success: true });
+});
