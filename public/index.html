@@ -342,7 +342,7 @@ footer { padding:12px 24px; border-top:1px solid var(--border); font-size:.67rem
   <div id="drawerContent"></div>
 </div>
 
-<footer>⚠ ArbiScan — données réelles via CCXT · 5 563 paires · 10 exchanges · Pas de conseils financiers</footer>
+<footer>⚠ ArbiScan — données réelles via CCXT · 6 101 paires · 10 exchanges · Pas de conseils financiers</footer>
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -387,7 +387,7 @@ function sidebarHTML() {
     <button class="btn-run" id="btnRun" onclick="runScan()">
       <span class="btn-ico">⬡ Lancer le scan</span><span class="spin"></span>
     </button>
-    <button class="btn-full" onclick="runFull()">⬡ Scan complet (5 563 paires)</button>
+    <button class="btn-full" onclick="runFull()">⬡ Scan complet (6 101 paires)</button>
     <label style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
       <input type="checkbox" id="rAuto" onchange="toggleAuto(this.checked)" style="accent-color:var(--green);width:auto">
       <span style="font-size:.77rem">Auto-scan 30s</span>
@@ -695,10 +695,11 @@ initSidebar();
   document.getElementById('panel-'+n).style.display = n==='signals' ? 'flex' : 'none';
 });
 
-document.getElementById('sPairs').textContent = '5 563';
+document.getElementById('sPairs').textContent = '6 101';
 </script>
 </body>
 </html>
+
 
 
 
