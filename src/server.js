@@ -442,12 +442,25 @@ app.get('/api/bot/status', (req, res) => {
   res.json(tradeBot.getState());
 });
 
-// POST /api/bot/start — démarrer le bot
+// POST /api/bot/start — démarrer le bot avec config dynamique
 app.post('/api/bot/start', async (req, res) => {
-  const { adminKey } = req.body;
+  const { adminKey, okxCapital, htxCapital, minSpreadPct, dryRun } = req.body;
   if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Accès refusé' });
-  await tradeBot.start();
-  res.json({ success: true, message: 'Bot démarré' });
+
+  // Passer la config dynamique au bot
+  const config = {
+    okxCapital:    parseFloat(okxCapital)  || 10,
+    htxCapital:    parseFloat(htxCapital)  || 10,
+    minSpreadPct:  parseFloat(minSpreadPct)|| 2.0,
+    dryRun:        dryRun === true || dryRun === 'true',
+  };
+
+  await tradeBot.start(config);
+  const modeLabel = config.dryRun ? '🧪 Simulation' : '💰 Production';
+  res.json({
+    success: true,
+    message: `✅ Bot démarré — ${modeLabel} | OKX: ${config.okxCapital} USDT | HTX: ${config.htxCapital} USDT | Spread min: ${config.minSpreadPct}%`
+  });
 });
 
 // POST /api/bot/stop — arrêter le bot

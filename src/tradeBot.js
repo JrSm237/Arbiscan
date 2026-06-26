@@ -10,13 +10,16 @@ const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 const CONFIG = {
-  MIN_SPREAD_PCT:   parseFloat(process.env.MIN_SPREAD_PCT  || '2.0'),   // 2% minimum
-  CAPITAL_PER_LEG: parseFloat(process.env.CAPITAL_PER_LEG || '10'),    // 10 USDT par leg
-  FEE_PCT:         0.1,    // 0.1% frais de trading par leg
-  SCAN_INTERVAL:   15000,  // scan toutes les 15 secondes
-  ORDER_TIMEOUT:   10000,  // timeout ordre 10s
-  MAX_SLIPPAGE:    0.3,    // slippage max accepté 0.3%
-  DRY_RUN: process.env.DRY_RUN === 'true', // true = simulation sans vrai trade
+  MIN_SPREAD_PCT:   parseFloat(process.env.MIN_SPREAD_PCT  || '2.0'),
+  CAPITAL_PER_LEG: parseFloat(process.env.CAPITAL_PER_LEG || '10'),
+  OKX_CAPITAL:     parseFloat(process.env.CAPITAL_PER_LEG || '10'),
+  HTX_CAPITAL:     parseFloat(process.env.CAPITAL_PER_LEG || '10'),
+  SELECTED_PAIR:   null,   // null = toutes les paires prioritaires
+  FEE_PCT:         0.1,
+  SCAN_INTERVAL:   15000,
+  ORDER_TIMEOUT:   10000,
+  MAX_SLIPPAGE:    0.3,
+  DRY_RUN: process.env.DRY_RUN === 'true',
 };
 
 // ── EXCHANGES ─────────────────────────────────────────────────────────────────
@@ -123,14 +126,16 @@ async function fetchBalances() {
 function hasEnoughFunds(buyExchange, sellExchange, symbol, buyPrice) {
   const base = symbol.split('/')[0];
 
-  // Exchange acheteur doit avoir assez de USDT
-  const buyerUSDT   = state.balances[buyExchange]?.USDT || 0;
-  // Exchange vendeur doit avoir assez du token
-  const sellerToken = state.balances[sellExchange]?.free?.[base] || 0;
-  const neededToken = CONFIG.CAPITAL_PER_LEG / buyPrice;
+  // Capital par exchange (OKX ou HTX)
+  const buyerCapital  = buyExchange  === 'okx' ? CONFIG.OKX_CAPITAL : CONFIG.HTX_CAPITAL;
+  const sellerCapital = sellExchange === 'okx' ? CONFIG.OKX_CAPITAL : CONFIG.HTX_CAPITAL;
 
-  if (buyerUSDT < CONFIG.CAPITAL_PER_LEG) {
-    return { ok: false, reason: `${buyExchange} : USDT insuffisant (${buyerUSDT.toFixed(2)} < ${CONFIG.CAPITAL_PER_LEG})` };
+  const buyerUSDT   = state.balances[buyExchange]?.USDT || 0;
+  const sellerToken = state.balances[sellExchange]?.free?.[base] || 0;
+  const neededToken = buyerCapital / buyPrice;
+
+  if (buyerUSDT < buyerCapital) {
+    return { ok: false, reason: `${buyExchange} : USDT insuffisant (${buyerUSDT.toFixed(2)} < ${buyerCapital})` };
   }
   if (sellerToken < neededToken) {
     return { ok: false, reason: `${sellExchange} : ${base} insuffisant (${sellerToken.toFixed(6)} < ${neededToken.toFixed(6)})` };
@@ -277,7 +282,10 @@ async function scanAndTrade() {
   if (state.activeTrade) return; // Trade en cours, on attend
   state.lastScan = new Date();
 
-  for (const symbol of PRIORITY_PAIRS) {
+  // Si une paire spécifique est sélectionnée, on ne scanne que celle-là
+  const pairsToScan = CONFIG.SELECTED_PAIR ? [CONFIG.SELECTED_PAIR] : PRIORITY_PAIRS;
+
+  for (const symbol of pairsToScan) {
     if (state.activeTrade) break;
 
     try {
@@ -345,14 +353,36 @@ _Vous pouvez retirer les bénéfices et maintenir le ratio 50/50_`);
 }
 
 // ── DÉMARRER LE BOT ───────────────────────────────────────────────────────────
-async function start() {
-  if (state.running) return;
+async function start(dynamicConfig = {}) {
+  // Arrêter le bot s'il tourne déjà avant de reconfigurer
+  if (state.running) {
+    state.running = false;
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // Appliquer la config dynamique
+  if (dynamicConfig.minSpreadPct)  CONFIG.MIN_SPREAD_PCT   = dynamicConfig.minSpreadPct;
+  if (dynamicConfig.okxCapital)    CONFIG.OKX_CAPITAL      = dynamicConfig.okxCapital;
+  if (dynamicConfig.htxCapital)    CONFIG.HTX_CAPITAL      = dynamicConfig.htxCapital;
+  if (dynamicConfig.dryRun !== undefined) CONFIG.DRY_RUN   = dynamicConfig.dryRun;
+
+  // Paire sélectionnée — mode single pair ou multi pairs
+  if (dynamicConfig.pair) {
+    CONFIG.SELECTED_PAIR = dynamicConfig.pair;
+    CONFIG.CAPITAL_PER_LEG = Math.min(dynamicConfig.okxCapital || 10, dynamicConfig.htxCapital || 10);
+  } else {
+    CONFIG.SELECTED_PAIR = null;
+    CONFIG.CAPITAL_PER_LEG = parseFloat(process.env.CAPITAL_PER_LEG || '10');
+  }
+
   state.running = true;
 
   console.log('\n🤖 ArbiScan Trade Bot démarré');
   console.log(`   Exchanges    : OKX + HTX`);
+  console.log(`   Paire        : ${CONFIG.SELECTED_PAIR || 'Multi-paires'}`);
   console.log(`   Spread min   : ${CONFIG.MIN_SPREAD_PCT}%`);
-  console.log(`   Capital/leg  : ${CONFIG.CAPITAL_PER_LEG} USDT`);
+  console.log(`   Capital OKX  : ${CONFIG.OKX_CAPITAL || CONFIG.CAPITAL_PER_LEG} USDT`);
+  console.log(`   Capital HTX  : ${CONFIG.HTX_CAPITAL || CONFIG.CAPITAL_PER_LEG} USDT`);
   console.log(`   Mode         : ${CONFIG.DRY_RUN ? '🧪 SIMULATION' : '💰 PRODUCTION'}`);
   console.log(`   Scan interval: ${CONFIG.SCAN_INTERVAL / 1000}s\n`);
 
@@ -365,14 +395,16 @@ async function start() {
     await tg(`🚀 *ArbiScan Bot DÉMARRÉ*
 
 🤖 *Mode :* ${CONFIG.DRY_RUN ? '🧪 Simulation' : '💰 Production'}
+💎 *Paire :* ${CONFIG.SELECTED_PAIR || 'Multi-paires (top 30)'}
 📈 *Spread min :* ${CONFIG.MIN_SPREAD_PCT}%
-💵 *Capital/leg :* ${CONFIG.CAPITAL_PER_LEG} USDT
+💵 *Capital OKX :* ${CONFIG.OKX_CAPITAL} USDT
+💵 *Capital HTX :* ${CONFIG.HTX_CAPITAL} USDT
 
-*Balances initiales :*
+*Balances actuelles :*
 🔵 OKX USDT : \`${okxUSDT.toFixed(2)}\`
 🟠 HTX USDT : \`${htxUSDT.toFixed(2)}\`
 
-_Le bot scanne toutes les ${CONFIG.SCAN_INTERVAL / 1000}s et exécute automatiquement les trades avec spread > ${CONFIG.MIN_SPREAD_PCT}%_`);
+_Scan toutes les ${CONFIG.SCAN_INTERVAL / 1000}s — Trades automatiques si spread > ${CONFIG.MIN_SPREAD_PCT}%_`);
 
   } catch (e) {
     console.error('Erreur démarrage:', e.message);
@@ -402,6 +434,14 @@ function stop() {
   tg('⏹ *Bot ArbiScan arrêté manuellement*');
 }
 
-function getState() { return { ...state, config: CONFIG }; }
+function getState() {
+  return {
+    ...state,
+    config: {
+      ...CONFIG,
+      selectedPair: CONFIG.SELECTED_PAIR || 'Multi-paires',
+    }
+  };
+}
 
 module.exports = { start, stop, getState, sendWeeklyReport, fetchBalances };

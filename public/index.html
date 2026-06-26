@@ -312,16 +312,116 @@ footer{padding:12px 24px;border-top:1px solid var(--border);font-size:.67rem;col
 
       <!-- CONTRÔLES BOT -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
-        <div class="stitle">Contrôles du bot</div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-          <button onclick="botAction('start')" style="font-family:var(--mono);font-size:.78rem;background:var(--green);color:#0A0E1A;border:none;border-radius:6px;padding:9px 18px;cursor:pointer;font-weight:700">▶ Démarrer</button>
-          <button onclick="botAction('stop')"  style="font-family:var(--mono);font-size:.78rem;background:var(--orange);color:#fff;border:none;border-radius:6px;padding:9px 18px;cursor:pointer;font-weight:700">⏹ Arrêter</button>
-          <button onclick="loadBotStatus()"    style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:9px 18px;cursor:pointer">↻ Actualiser</button>
-          <button onclick="sendReport()"       style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:9px 18px;cursor:pointer">📊 Rapport Telegram</button>
+        <div class="stitle">Lancer le bot</div>
+
+        <!-- CONFIG AU LANCEMENT -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+
+          <!-- PAIRE DE TRADING -->
+          <div style="grid-column:1/-1">
+            <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Paire de trading</div>
+            <div style="display:flex;gap:8px">
+              <select id="cfgPair"
+                style="font-family:var(--mono);font-size:.82rem;background:var(--card);color:var(--green);border:1px solid var(--green);border-radius:6px;padding:9px 12px;outline:none;flex:1;font-weight:700"
+                onchange="updatePairInfo()">
+                <option value="BTC/USDT">BTC/USDT</option>
+                <option value="ETH/USDT">ETH/USDT</option>
+                <option value="SOL/USDT">SOL/USDT</option>
+                <option value="BNB/USDT">BNB/USDT</option>
+                <option value="XRP/USDT">XRP/USDT</option>
+                <option value="DOGE/USDT">DOGE/USDT</option>
+                <option value="ADA/USDT">ADA/USDT</option>
+                <option value="AVAX/USDT">AVAX/USDT</option>
+                <option value="LINK/USDT">LINK/USDT</option>
+                <option value="DOT/USDT">DOT/USDT</option>
+                <option value="MATIC/USDT">MATIC/USDT</option>
+                <option value="LTC/USDT">LTC/USDT</option>
+                <option value="UNI/USDT">UNI/USDT</option>
+                <option value="ATOM/USDT">ATOM/USDT</option>
+                <option value="TON/USDT">TON/USDT</option>
+                <option value="NEAR/USDT">NEAR/USDT</option>
+                <option value="ARB/USDT">ARB/USDT</option>
+                <option value="OP/USDT">OP/USDT</option>
+                <option value="SUI/USDT">SUI/USDT</option>
+                <option value="SEI/USDT">SEI/USDT</option>
+                <option value="INJ/USDT">INJ/USDT</option>
+                <option value="TIA/USDT">TIA/USDT</option>
+                <option value="RUNE/USDT">RUNE/USDT</option>
+                <option value="GMX/USDT">GMX/USDT</option>
+                <option value="WIF/USDT">WIF/USDT</option>
+                <option value="PEPE/USDT">PEPE/USDT</option>
+                <option value="BONK/USDT">BONK/USDT</option>
+                <option value="FTM/USDT">FTM/USDT</option>
+                <option value="APT/USDT">APT/USDT</option>
+                <option value="EGLD/USDT">EGLD/USDT</option>
+              </select>
+              <input type="text" id="cfgPairCustom" placeholder="Autre ex: HBAR/USDT"
+                style="font-family:var(--mono);font-size:.78rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:150px"
+                oninput="this.value=this.value.toUpperCase()">
+            </div>
+            <!-- Info paire -->
+            <div id="pairInfo" style="margin-top:6px;font-family:var(--mono);font-size:.68rem;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:5px;padding:7px 10px">
+              ⚠ Pour trader <strong id="pairBase" style="color:var(--green)">BTC</strong>/USDT :
+              OKX doit avoir des <strong style="color:var(--green)">USDT</strong> (pour acheter BTC) +
+              HTX doit avoir des <strong style="color:var(--green)">BTC</strong> (pour vendre) — et vice-versa.
+              Alimentez les deux exchanges en <strong id="pairBase2" style="color:var(--green)">BTC</strong> et USDT avant de démarrer.
+            </div>
+          </div>
+
+          <!-- CAPITAL -->
+          <div>
+            <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Capital OKX (USDT)</div>
+            <input type="number" id="cfgOkxCapital" value="10" min="5" step="1"
+              oninput="updateTotal()"
+              style="font-family:var(--mono);font-size:.82rem;background:var(--card);color:var(--green);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:100%;font-weight:700">
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Capital HTX (USDT)</div>
+            <input type="number" id="cfgHtxCapital" value="10" min="5" step="1"
+              oninput="updateTotal()"
+              style="font-family:var(--mono);font-size:.82rem;background:var(--card);color:var(--green);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:100%;font-weight:700">
+          </div>
+
+          <!-- SPREAD -->
+          <div>
+            <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Spread minimum (%)</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="range" id="cfgSpreadRange" min="0.5" max="10" step="0.1" value="2.0"
+                oninput="document.getElementById('cfgSpreadDisplay').textContent=parseFloat(this.value).toFixed(1)+'%'"
+                style="flex:1;accent-color:var(--green);cursor:pointer">
+              <span id="cfgSpreadDisplay" style="font-family:var(--mono);font-size:.82rem;color:var(--green);font-weight:700;min-width:40px">2.0%</span>
+            </div>
+          </div>
+
+          <!-- MODE -->
+          <div>
+            <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Mode</div>
+            <select id="cfgDryRun"
+              style="font-family:var(--mono);font-size:.78rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 10px;outline:none;width:100%">
+              <option value="true">🧪 Simulation (recommandé)</option>
+              <option value="false">💰 Production (vrais trades)</option>
+            </select>
+          </div>
         </div>
-        <div style="font-family:var(--mono);font-size:.7rem;color:var(--muted)">Clé admin requise pour start/stop</div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <input type="password" id="adminKeyInput" placeholder="Clé admin" style="font-family:var(--mono);font-size:.76rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 10px;outline:none;width:200px">
+
+        <!-- TOTAL CAPITAL RÉSUMÉ -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">Capital total engagé</span>
+          <span style="font-family:var(--mono);font-size:.9rem;font-weight:700;color:var(--green)" id="cfgTotalCapital">20 USDT</span>
+        </div>
+
+        <!-- BOUTONS -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+          <button onclick="botStart()" style="font-family:var(--mono);font-size:.8rem;background:var(--green);color:#0A0E1A;border:none;border-radius:6px;padding:10px 20px;cursor:pointer;font-weight:700;flex:1">▶ Démarrer le bot</button>
+          <button onclick="botAction('stop')" style="font-family:var(--mono);font-size:.8rem;background:var(--orange);color:#fff;border:none;border-radius:6px;padding:10px 16px;cursor:pointer;font-weight:700">⏹ Stop</button>
+          <button onclick="loadBotStatus()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:10px 14px;cursor:pointer">↻</button>
+          <button onclick="sendReport()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:10px 14px;cursor:pointer">📊</button>
+        </div>
+
+        <!-- CLÉ ADMIN -->
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="password" id="adminKeyInput" placeholder="🔑 Clé admin"
+            style="font-family:var(--mono);font-size:.76rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 10px;outline:none;flex:1">
         </div>
         <div id="botActionMsg" style="margin-top:8px;font-family:var(--mono);font-size:.74rem"></div>
       </div>
@@ -720,11 +820,11 @@ async function loadBotStatus() {
 
     document.getElementById('botStatus').textContent  = d.running ? '🟢 Actif' : '🔴 Arrêté';
     document.getElementById('botStatus').style.color  = d.running ? 'var(--green)' : 'var(--orange)';
-    document.getElementById('botMode').textContent    = d.config?.DRY_RUN ? '🧪 Simulation' : '💰 Production';
+    document.getElementById('botMode').textContent    = (d.config?.DRY_RUN ? '🧪 Simulation' : '💰 Production') + ' · ' + (d.config?.selectedPair || 'Multi-paires');
     document.getElementById('botPnL').textContent     = '+' + (d.totalPnL||0).toFixed(4) + ' USDT';
     document.getElementById('botTrades').textContent  = `${d.successTrades||0}✅ / ${d.failedTrades||0}❌`;
     document.getElementById('cfgSpread').textContent  = (d.config?.MIN_SPREAD_PCT||2) + '%';
-    document.getElementById('cfgCapital').textContent = (d.config?.CAPITAL_PER_LEG||10) + ' USDT';
+    document.getElementById('cfgCapital').textContent = `OKX: ${d.config?.OKX_CAPITAL||10} · HTX: ${d.config?.HTX_CAPITAL||10} USDT`;
     document.getElementById('cfgInterval').textContent= ((d.config?.SCAN_INTERVAL||15000)/1000) + 's';
 
     // Balances
@@ -762,10 +862,55 @@ function renderTrades(trades) {
   }).join('');
 }
 
+function updateTotal() {
+  const okx = parseFloat(document.getElementById('cfgOkxCapital').value)||0;
+  const htx = parseFloat(document.getElementById('cfgHtxCapital').value)||0;
+  document.getElementById('cfgTotalCapital').textContent = (okx+htx).toFixed(0)+' USDT';
+}
+
+function updatePairInfo() {
+  const pair = document.getElementById('cfgPairCustom').value.trim() ||
+               document.getElementById('cfgPair').value;
+  const base = pair.split('/')[0] || 'BTC';
+  document.querySelectorAll('#pairBase, #pairBase2').forEach(el => el.textContent = base);
+}
+
+function getSelectedPair() {
+  const custom = document.getElementById('cfgPairCustom').value.trim().toUpperCase();
+  return custom || document.getElementById('cfgPair').value;
+}
+
+async function botStart() {
+  const key     = document.getElementById('adminKeyInput').value;
+  const msg     = document.getElementById('botActionMsg');
+  const okxCap  = parseFloat(document.getElementById('cfgOkxCapital').value) || 10;
+  const htxCap  = parseFloat(document.getElementById('cfgHtxCapital').value) || 10;
+  const spread  = parseFloat(document.getElementById('cfgSpreadRange').value) || 2.0;
+  const dryRun  = document.getElementById('cfgDryRun').value === 'true';
+  const pair    = getSelectedPair();
+
+  if (!key)  { msg.style.color='var(--orange)'; msg.textContent='🔑 Clé admin requise'; return; }
+  if (!pair) { msg.style.color='var(--orange)'; msg.textContent='Sélectionnez une paire'; return; }
+
+  msg.style.color = 'var(--muted)';
+  msg.textContent = `⏳ Démarrage sur ${pair}…`;
+
+  try {
+    const r = await fetch('/api/bot/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ adminKey:key, okxCapital:okxCap, htxCapital:htxCap, minSpreadPct:spread, dryRun, pair })
+    });
+    const d = await r.json();
+    msg.style.color = d.success ? 'var(--green)' : 'var(--orange)';
+    msg.textContent = d.message || d.error;
+    if (d.success) setTimeout(loadBotStatus, 2000);
+  } catch(e) { msg.style.color='var(--orange)'; msg.textContent='Erreur: '+e.message; }
+}
+
 async function botAction(action) {
   const key = document.getElementById('adminKeyInput').value;
   const msg = document.getElementById('botActionMsg');
-  if (!key) { msg.style.color='var(--orange)'; msg.textContent='Clé admin requise'; return; }
+  if (!key) { msg.style.color='var(--orange)'; msg.textContent='🔑 Clé admin requise'; return; }
   try {
     const r = await fetch('/api/bot/'+action, {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -803,8 +948,3 @@ if(token) updateHeader();
 </script>
 </body>
 </html>
-
-
-
-
-
