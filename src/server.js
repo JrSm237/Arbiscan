@@ -502,45 +502,61 @@ app.post('/api/bot/report', async (req, res) => {
 });
 
 // ── ROUTES ADMIN ──────────────────────────────────────────────────────────────
-const bcrypt = require('bcryptjs');
 
-const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || 'admin@arbiscan.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'arbiscan2024'; // en clair si pas hashé
+const ADMIN_EMAIL    = (process.env.ADMIN_EMAIL    || '').trim().toLowerCase();
+const ADMIN_PASSWORD = (process.env.ADMIN_PASSWORD || '').trim();
 
-// POST /api/admin/login — connexion admin
+// Debug au démarrage (visible dans les logs Render)
+console.log(`🔑 Admin email configuré : "${ADMIN_EMAIL || 'NON DÉFINI'}"`);
+console.log(`🔑 Admin password configuré : ${ADMIN_PASSWORD ? 'OUI (' + ADMIN_PASSWORD.length + ' caractères)' : 'NON DÉFINI'}`);
+
+// POST /api/admin/login — connexion admin (email + mot de passe)
 app.post('/api/admin/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email et mot de passe requis' });
+  const emailInput    = (req.body.email    || '').trim().toLowerCase();
+  const passwordInput = (req.body.password || '').trim();
 
-  // Vérifier email
-  if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  console.log(`🔐 Tentative admin : "${emailInput}"`);
+
+  if (!emailInput || !passwordInput) {
+    return res.status(400).json({ error: 'Email et mot de passe requis' });
+  }
+
+  // Vérifier que les variables sont configurées
+  if (!ADMIN_EMAIL) {
+    console.error('❌ ADMIN_EMAIL non configuré dans les variables Render');
+    return res.status(500).json({ error: 'Admin non configuré — ajoutez ADMIN_EMAIL dans Render' });
+  }
+  if (!ADMIN_PASSWORD) {
+    console.error('❌ ADMIN_PASSWORD non configuré dans les variables Render');
+    return res.status(500).json({ error: 'Admin non configuré — ajoutez ADMIN_PASSWORD dans Render' });
+  }
+
+  // Comparer email
+  if (emailInput !== ADMIN_EMAIL) {
+    console.log(`❌ Email incorrect : "${emailInput}" ≠ "${ADMIN_EMAIL}"`);
     return res.status(401).json({ error: 'Identifiants incorrects' });
   }
 
-  // Vérifier mot de passe (hash bcrypt ou comparaison directe)
-  let valid = false;
-  if (ADMIN_PASSWORD.startsWith('$2')) {
-    valid = await bcrypt.compare(password, ADMIN_PASSWORD);
-  } else {
-    valid = password === ADMIN_PASSWORD;
+  // Comparer mot de passe (comparaison directe, pas de bcrypt)
+  if (passwordInput !== ADMIN_PASSWORD) {
+    console.log('❌ Mot de passe incorrect');
+    return res.status(401).json({ error: 'Identifiants incorrects' });
   }
 
-  if (!valid) return res.status(401).json({ error: 'Identifiants incorrects' });
-
-  // Générer token admin
+  // Générer token JWT
   const jwt   = require('jsonwebtoken');
   const token = jwt.sign(
-    { email, role: 'admin', is_admin: true },
-    process.env.JWT_SECRET || 'arbiscan-secret',
+    { email: emailInput, role: 'admin', is_admin: true },
+    process.env.JWT_SECRET || 'arbiscan-secret-default',
     { expiresIn: '24h' }
   );
 
-  console.log(`✅ Admin connecté : ${email}`);
+  console.log(`✅ Admin connecté : ${emailInput}`);
   res.json({
     success:  true,
     token,
     adminKey: process.env.ADMIN_KEY || 'admin',
-    email,
+    email:    emailInput,
   });
 });
 
@@ -570,3 +586,4 @@ function requireAdminToken(req, res, next) {
     return res.status(401).json({ error: 'Token invalide' });
   }
 }
+
