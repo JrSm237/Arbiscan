@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArbiScan — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0A0E1A;--surface:#111827;--card:#0F1929;--border:#1E2D40;
+  --green:#00F5A0;--orange:#FF6B35;--blue:#3B82F6;--yellow:#F59E0B;
+  --red:#EF4444;--muted:#8892A4;--text:#E2E8F0;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+
+/* LOGIN SCREEN */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px 32px;width:100%;max-width:380px}
+.login-logo{font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--green);display:flex;align-items:center;gap:8px;margin-bottom:28px}
+.login-logo-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pdot 2s infinite}
+@keyframes pdot{0%,100%{opacity:1}50%{opacity:.3}}
+.login-title{font-size:1.3rem;font-weight:700;margin-bottom:6px}
+.login-sub{font-size:.82rem;color:var(--muted);margin-bottom:24px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:.78rem;color:var(--muted)}
+.field input{font-family:var(--mono);font-size:.82rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:11px 13px;outline:none;width:100%;transition:border-color .2s}
+.field input:focus{border-color:var(--green)}
+.btn-login{width:100%;padding:12px;border:none;border-radius:7px;background:var(--green);color:#0A0E1A;font-family:var(--mono);font-size:.84rem;font-weight:700;cursor:pointer;margin-top:6px;transition:opacity .2s}
+.btn-login:hover{opacity:.88}
+.btn-login:disabled{opacity:.4;cursor:not-allowed}
+.login-msg{font-family:var(--mono);font-size:.74rem;padding:8px 12px;border-radius:6px;margin-top:10px;display:none}
+.msg-err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--red)}
+
+/* ADMIN LAYOUT */
+.admin-screen{display:none;flex-direction:column;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:1px solid var(--border);background:rgba(10,14,26,.96);position:sticky;top:0;z-index:100}
+.logo{font-family:var(--mono);font-size:.95rem;font-weight:700;color:var(--green);display:flex;align-items:center;gap:8px}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pdot 2s infinite}
+.header-right{display:flex;align-items:center;gap:12px}
+.admin-badge{font-family:var(--mono);font-size:.65rem;background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25);padding:3px 10px;border-radius:10px;font-weight:700}
+.btn-logout{font-family:var(--mono);font-size:.72rem;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;transition:color .2s,border-color .2s}
+.btn-logout:hover{color:var(--red);border-color:var(--red)}
+.btn-site{font-family:var(--mono);font-size:.72rem;color:var(--green);background:transparent;border:1px solid var(--green);border-radius:6px;padding:6px 12px;cursor:pointer;text-decoration:none}
+
+/* NAV TABS */
+.nav-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);padding:0 24px;overflow-x:auto}
+.nav-tabs::-webkit-scrollbar{display:none}
+.ntab{font-family:var(--mono);font-size:.72rem;color:var(--muted);padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:color .2s,border-color .2s;white-space:nowrap;flex-shrink:0;user-select:none}
+.ntab.active{color:var(--green);border-bottom-color:var(--green)}
+
+/* CONTENT */
+.content{padding:24px;display:flex;flex-direction:column;gap:18px;max-width:1200px;margin:0 auto;width:100%}
+.panel{display:none;flex-direction:column;gap:16px}
+.panel.active{display:flex}
+
+/* SECTION */
+.section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+.sec-title{font-family:var(--mono);font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.14em;display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* STAT GRID */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:700px){.stat-grid{grid-template-columns:1fr 1fr}}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.stat-lbl{font-family:var(--mono);font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.stat-val{font-family:var(--mono);font-size:1.3rem;font-weight:700;color:var(--green)}
+.stat-sub{font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-top:2px}
+
+/* TABLE */
+.table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;min-width:500px}
+th{font-family:var(--mono);font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid rgba(30,45,64,.5);font-family:var(--mono);font-size:.76rem}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* BADGES */
+.tag{font-family:var(--mono);font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.tag-active{background:rgba(0,245,160,.12);color:var(--green);border:1px solid rgba(0,245,160,.25)}
+.tag-free{background:rgba(136,146,164,.1);color:var(--muted);border:1px solid var(--border)}
+.tag-admin{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.tag-standard{background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.25)}
+.tag-premium{background:rgba(0,245,160,.12);color:var(--green);border:1px solid rgba(0,245,160,.25)}
+.tag-diamond{background:rgba(103,232,249,.12);color:#67E8F9;border:1px solid rgba(103,232,249,.25)}
+
+/* FORMS */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.form-row{grid-template-columns:1fr}}
+.form-field{display:flex;flex-direction:column;gap:5px}
+.form-field label{font-family:var(--mono);font-size:.64rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.form-field input,.form-field select{font-family:var(--mono);font-size:.8rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:100%}
+.form-field input:focus,.form-field select:focus{border-color:var(--green)}
+.btn-primary{font-family:var(--mono);font-size:.78rem;font-weight:700;background:var(--green);color:#0A0E1A;border:none;border-radius:6px;padding:10px 18px;cursor:pointer;transition:opacity .2s}
+.btn-primary:hover{opacity:.88}
+.btn-danger{font-family:var(--mono);font-size:.74rem;background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.3);border-radius:5px;padding:5px 10px;cursor:pointer;transition:background .2s}
+.btn-danger:hover{background:rgba(239,68,68,.2)}
+.btn-sm{font-family:var(--mono);font-size:.7rem;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:5px;padding:5px 10px;cursor:pointer}
+
+/* BOT PANEL */
+.bot-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.bot-grid{grid-template-columns:1fr}}
+
+/* ALERTS */
+.alert{font-family:var(--mono);font-size:.74rem;padding:10px 14px;border-radius:7px;margin-top:8px}
+.alert-ok{background:rgba(0,245,160,.08);border:1px solid rgba(0,245,160,.2);color:var(--green)}
+.alert-err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--red)}
+.alert-info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);color:var(--blue)}
+
+/* LOG */
+.log-box{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:12px;font-family:var(--mono);font-size:.7rem;max-height:220px;overflow-y:auto;line-height:1.8;color:var(--muted)}
+.log-ok{color:var(--green)}.log-err{color:var(--red)}.log-info{color:var(--blue)}
+
+@media(max-width:580px){
+  .content{padding:14px}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  header{padding:10px 14px}
+}
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo"><div class="login-logo-dot"></div>ARBISCAN</div>
+    <div class="login-title">Espace Administrateur</div>
+    <div class="login-sub">Accès réservé. Entrez vos identifiants admin.</div>
+    <div class="field"><label>Email admin</label><input type="email" id="adminEmail" placeholder="admin@arbiscan.com" onkeydown="if(event.key==='Enter')doAdminLogin()"></div>
+    <div class="field"><label>Mot de passe</label><input type="password" id="adminPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAdminLogin()"></div>
+    <button class="btn-login" id="loginBtn" onclick="doAdminLogin()">Connexion →</button>
+    <div class="login-msg msg-err" id="loginMsg"></div>
+  </div>
+</div>
+
+<!-- ── ADMIN DASHBOARD ── -->
+<div class="admin-screen" id="adminScreen">
+
+  <header>
+    <div class="logo"><div class="logo-dot"></div>ARBISCAN <span style="color:var(--muted);font-weight:400;margin-left:6px">/ Admin</span></div>
+    <div class="header-right">
+      <span class="admin-badge">🔴 ADMIN</span>
+      <a href="/" class="btn-site">← Site</a>
+      <button class="btn-logout" onclick="adminLogout()">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="nav-tabs">
+    <div class="ntab active" onclick="goPanel('overview')">📊 Vue d'ensemble</div>
+    <div class="ntab" onclick="goPanel('bot')">🤖 Bot Trading</div>
+    <div class="ntab" onclick="goPanel('signals')">⬡ Signaux</div>
+    <div class="ntab" onclick="goPanel('users')">👥 Utilisateurs</div>
+    <div class="ntab" onclick="goPanel('alerts')">🔔 Alertes Telegram</div>
+    <div class="ntab" onclick="goPanel('settings')">⚙ Paramètres</div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── OVERVIEW ── -->
+    <div class="panel active" id="panel-overview">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-lbl">Bot Status</div><div class="stat-val" id="ovBotStatus">—</div><div class="stat-sub" id="ovBotMode">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">PnL Total</div><div class="stat-val" id="ovPnL">—</div><div class="stat-sub" id="ovTrades">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">OKX Balance</div><div class="stat-val" id="ovOkx">—</div><div class="stat-sub">USDT</div></div>
+        <div class="stat-card"><div class="stat-lbl">HTX Balance</div><div class="stat-val" id="ovHtx">—</div><div class="stat-sub">USDT</div></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">Derniers trades</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Paire</th><th>Route</th><th>Spread</th><th>PnL</th><th>Statut</th><th>Date</th></tr></thead>
+            <tbody id="ovTradeTbl"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">Derniers signaux détectés (auto-scan)</div>
+        <div id="ovSignals" style="font-family:var(--mono);font-size:.74rem;color:var(--muted)">Chargement…</div>
+      </div>
+    </div>
+
+    <!-- ── BOT TRADING ── -->
+    <div class="panel" id="panel-bot">
+      <div class="section">
+        <div class="sec-title">Lancer le bot</div>
+        <div class="form-row" style="margin-bottom:14px">
+          <div class="form-field">
+            <label>Paire de trading</label>
+            <input type="text" id="botPair" placeholder="ex: BTC/USDT, ETH/USDT…" oninput="this.value=this.value.toUpperCase();validatePair()">
+            <div id="pairValidMsg" style="font-family:var(--mono);font-size:.67rem;margin-top:4px"></div>
+          </div>
+          <div class="form-field">
+            <label>Mode</label>
+            <select id="botDryRun">
+              <option value="true">🧪 Simulation (recommandé)</option>
+              <option value="false">💰 Production (vrais trades)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Capital OKX (USDT)</label>
+            <input type="number" id="botOkxCap" value="10" min="5" step="1" oninput="updateBotTotal()">
+          </div>
+          <div class="form-field">
+            <label>Capital HTX (USDT)</label>
+            <input type="number" id="botHtxCap" value="10" min="5" step="1" oninput="updateBotTotal()">
+          </div>
+          <div class="form-field">
+            <label>Spread minimum (%)</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="range" id="botSpread" min="0.5" max="10" step="0.1" value="2.0"
+                oninput="document.getElementById('botSpreadVal').textContent=parseFloat(this.value).toFixed(1)+'%'"
+                style="flex:1;accent-color:var(--green);cursor:pointer">
+              <span id="botSpreadVal" style="font-family:var(--mono);font-size:.82rem;color:var(--green);font-weight:700;min-width:40px">2.0%</span>
+            </div>
+          </div>
+          <div class="form-field">
+            <label>Capital total</label>
+            <div style="font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--green);padding:9px 0" id="botTotalCap">20 USDT</div>
+          </div>
+        </div>
+        <!-- Instructions paire -->
+        <div id="botPairInfo" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:11px 14px;font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:14px;line-height:1.8"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="startBot()">▶ Démarrer le bot</button>
+          <button onclick="stopBot()" style="font-family:var(--mono);font-size:.78rem;background:rgba(255,107,53,.12);color:var(--orange);border:1px solid rgba(255,107,53,.3);border-radius:6px;padding:10px 16px;cursor:pointer">⏹ Arrêter</button>
+          <button onclick="loadBotPanel()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:10px 14px;cursor:pointer">↻ Actualiser</button>
+          <button onclick="sendBotReport()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:10px 14px;cursor:pointer">📊 Rapport Telegram</button>
+        </div>
+        <div id="botMsg" style="margin-top:10px"></div>
+      </div>
+
+      <div class="section">
+        <div class="sec-title">Historique des trades</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Paire</th><th>Route</th><th>Spread</th><th>PnL net</th><th>Durée</th><th>Statut</th><th>Date</th></tr></thead>
+            <tbody id="botTradeTbl"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Aucun trade</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SIGNAUX ── -->
+    <div class="panel" id="panel-signals">
+      <div class="section">
+        <div class="sec-title">Scanner maintenant</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+          <select id="scanPairs" style="font-family:var(--mono);font-size:.78rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none">
+            <option value="30">Top 30 (~5s)</option>
+            <option value="50">Top 50 (~8s)</option>
+            <option value="100">Top 100 (~15s)</option>
+            <option value="200">Top 200 (~30s)</option>
+          </select>
+          <input type="number" id="scanCapital" value="1000" min="100" step="100" placeholder="Capital USDT"
+            style="font-family:var(--mono);font-size:.78rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:140px">
+          <button class="btn-primary" onclick="runAdminScan()">⬡ Scanner</button>
+          <button onclick="runFullScan()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:10px 14px;cursor:pointer">⬡ Scan complet (6101 paires)</button>
+        </div>
+        <div id="adminScanMsg"></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">Signaux détectés</div>
+        <div id="adminSignalsList" style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-family:var(--mono);font-size:.76rem;color:var(--muted);text-align:center;padding:30px">Lancez un scan pour voir les signaux</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UTILISATEURS ── -->
+    <div class="panel" id="panel-users">
+      <div class="section">
+        <div class="sec-title">Activer un abonnement manuellement</div>
+        <div class="form-row" style="margin-bottom:12px">
+          <div class="form-field"><label>Email utilisateur</label><input type="email" id="subEmail" placeholder="user@email.com"></div>
+          <div class="form-field">
+            <label>Plan</label>
+            <select id="subPlan">
+              <option value="standard">Standard (7 jours)</option>
+              <option value="premium" selected>Premium (30 jours)</option>
+              <option value="diamond">Diamond (365 jours)</option>
+            </select>
+          </div>
+          <div class="form-field"><label>Référence paiement</label><input type="text" id="subRef" placeholder="Hash TX ou référence"></div>
+        </div>
+        <button class="btn-primary" onclick="activateSub()">✅ Activer l'abonnement</button>
+        <div id="subMsg" style="margin-top:8px"></div>
+      </div>
+
+      <div class="section">
+        <div class="sec-title">Abonnés actifs</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nom</th><th>Email</th><th>Plan</th><th>Expire le</th><th>Paiement</th></tr></thead>
+            <tbody id="usersTbl"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ALERTES ── -->
+    <div class="panel" id="panel-alerts">
+      <div class="section">
+        <div class="sec-title">Statut scanner automatique</div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-lbl">Scanner</div><div class="stat-val" id="altScan">—</div></div>
+          <div class="stat-card"><div class="stat-lbl">Telegram</div><div class="stat-val" id="altTg">—</div></div>
+          <div class="stat-card"><div class="stat-lbl">Dernier scan</div><div class="stat-val" id="altLast">—</div></div>
+          <div class="stat-card"><div class="stat-lbl">Seuil alerte</div><div class="stat-val" id="altThresh">—</div></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">Envoyer un message Telegram</div>
+        <textarea id="tgMsg" placeholder="Message à envoyer au groupe Telegram…"
+          style="width:100%;font-family:var(--mono);font-size:.78rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:10px 12px;outline:none;resize:vertical;min-height:80px;margin-bottom:10px"></textarea>
+        <div style="display:flex;gap:10px">
+          <button class="btn-primary" onclick="sendCustomTg()">📨 Envoyer</button>
+          <button onclick="sendTestTg()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:10px 14px;cursor:pointer">📨 Message test</button>
+        </div>
+        <div id="tgMsgRes" style="margin-top:8px"></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">Journal des alertes</div>
+        <div class="log-box" id="altLog">En attente…</div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="panel" id="panel-settings">
+      <div class="section">
+        <div class="sec-title">Informations du compte admin</div>
+        <div style="font-family:var(--mono);font-size:.8rem;color:var(--muted);display:flex;flex-direction:column;gap:8px">
+          <div>Email : <span style="color:var(--green)" id="setAdminEmail">—</span></div>
+          <div>Rôle : <span class="tag tag-admin">ADMINISTRATEUR</span></div>
+          <div>Accès : <span style="color:var(--green)">Toutes les fonctionnalités</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">Variables d'environnement requises (Render)</div>
+        <div style="font-family:var(--mono);font-size:.74rem;color:var(--muted);display:flex;flex-direction:column;gap:6px;line-height:1.8">
+          <div><span style="color:var(--green)">ADMIN_EMAIL</span> = votre email admin</div>
+          <div><span style="color:var(--green)">ADMIN_PASSWORD</span> = votre mot de passe admin (hashé)</div>
+          <div><span style="color:var(--green)">ADMIN_KEY</span> = clé secrète pour les actions admin</div>
+          <div><span style="color:var(--green)">OKX_API_KEY / OKX_SECRET / OKX_PASSPHRASE</span></div>
+          <div><span style="color:var(--green)">HTX_API_KEY / HTX_SECRET</span></div>
+          <div><span style="color:var(--green)">TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID</span></div>
+          <div><span style="color:var(--green)">MIN_SPREAD_PCT</span> = 2.0</div>
+          <div><span style="color:var(--green)">DRY_RUN</span> = true (simulation) / false (production)</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /admin-screen -->
+
+<script>
+const ADMIN_EMAIL    = null; // vérifié côté serveur
+let   adminToken     = sessionStorage.getItem('admin_token') || '';
+let   adminKey       = sessionStorage.getItem('admin_key')   || '';
+let   adminEmailStr  = sessionStorage.getItem('admin_email') || '';
+
+// ── LOGIN ──────────────────────────────────────────────────────────────────────
+async function doAdminLogin() {
+  const email = document.getElementById('adminEmail').value.trim();
+  const pass  = document.getElementById('adminPassword').value;
+  const btn   = document.getElementById('loginBtn');
+  const msg   = document.getElementById('loginMsg');
+
+  if (!email || !pass) { showLoginMsg('Email et mot de passe requis'); return; }
+
+  btn.disabled = true; btn.textContent = 'Connexion…';
+
+  try {
+    const r = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass }),
+    });
+    const d = await r.json();
+
+    if (d.success) {
+      adminToken    = d.token;
+      adminKey      = d.adminKey;
+      adminEmailStr = email;
+      sessionStorage.setItem('admin_token', adminToken);
+      sessionStorage.setItem('admin_key',   adminKey);
+      sessionStorage.setItem('admin_email', email);
+      showAdmin();
+    } else {
+      showLoginMsg(d.error || 'Identifiants incorrects');
+    }
+  } catch(e) {
+    showLoginMsg('Erreur réseau : ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Connexion →';
+  }
+}
+
+function showLoginMsg(msg) {
+  const el = document.getElementById('loginMsg');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+function adminLogout() {
+  sessionStorage.clear();
+  adminToken = ''; adminKey = ''; adminEmailStr = '';
+  document.getElementById('adminScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+function showAdmin() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('adminScreen').style.display = 'flex';
+  document.getElementById('setAdminEmail').textContent = adminEmailStr;
+  loadOverview();
+}
+
+// Restaurer session
+if (adminToken) showAdmin();
+
+// ── NAVIGATION ─────────────────────────────────────────────────────────────────
+function goPanel(name) {
+  const panels = ['overview','bot','signals','users','alerts','settings'];
+  panels.forEach(p => {
+    document.getElementById('panel-'+p).classList.toggle('active', p === name);
+    document.getElementById('panel-'+p).style.display = p === name ? 'flex' : 'none';
+  });
+  document.querySelectorAll('.ntab').forEach((t,i) => t.classList.toggle('active', i === panels.indexOf(name)));
+  if (name === 'overview') loadOverview();
+  if (name === 'bot')      loadBotPanel();
+  if (name === 'users')    loadUsers();
+  if (name === 'alerts')   loadAlerts();
+}
+
+// Init panels display
+['overview','bot','signals','users','alerts','settings'].forEach(p => {
+  const el = document.getElementById('panel-'+p);
+  el.style.display = p === 'overview' ? 'flex' : 'none';
+});
+
+// ── HELPERS ────────────────────────────────────────────────────────────────────
+function ah() { return { 'Content-Type':'application/json', 'Authorization':'Bearer '+adminToken }; }
+function fmt(n) { if(!n)return'—'; return n>1000?n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}):parseFloat(n).toFixed(4); }
+function showMsg(id, msg, type='ok') {
+  const el = document.getElementById(id);
+  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+}
+function fmtDate(ts) { if(!ts)return'—'; return new Date(ts).toLocaleString('fr-FR'); }
+
+// ── OVERVIEW ───────────────────────────────────────────────────────────────────
+async function loadOverview() {
+  try {
+    const [botR, statusR] = await Promise.all([
+      fetch('/api/bot/status'),
+      fetch('/api/status'),
+    ]);
+    const bot    = await botR.json();
+    const status = await statusR.json();
+
+    document.getElementById('ovBotStatus').textContent = bot.running ? '🟢 Actif' : '🔴 Arrêté';
+    document.getElementById('ovBotStatus').style.color = bot.running ? 'var(--green)' : 'var(--orange)';
+    document.getElementById('ovBotMode').textContent   = bot.config?.DRY_RUN ? '🧪 Simulation' : '💰 Production';
+    document.getElementById('ovPnL').textContent       = '+' + (bot.totalPnL||0).toFixed(4) + ' USDT';
+    document.getElementById('ovTrades').textContent    = `${bot.successTrades||0}✅ ${bot.failedTrades||0}❌`;
+    document.getElementById('ovOkx').textContent       = (bot.balances?.okx?.USDT||0).toFixed(2);
+    document.getElementById('ovHtx').textContent       = (bot.balances?.htx?.USDT||0).toFixed(2);
+
+    // Trades table
+    const trades = bot.tradeHistory || [];
+    document.getElementById('ovTradeTbl').innerHTML = trades.length
+      ? trades.slice(0,8).map(t=>`<tr>
+          <td style="color:${t.status==='success'?'var(--green)':'var(--red)'}">${t.symbol}</td>
+          <td style="color:var(--muted)">${t.buyExchange}→${t.sellExchange}</td>
+          <td>+${t.spreadPct?.toFixed(2)}%</td>
+          <td style="color:${t.pnl>0?'var(--green)':'var(--red)'}">${t.pnl>0?'+':''}${t.pnl?.toFixed(4)} USDT</td>
+          <td><span class="tag ${t.status==='success'?'tag-active':'tag-free'}">${t.status==='success'?'OK':'ÉCHOUÉ'}</span></td>
+          <td style="color:var(--muted)">${fmtDate(t.timestamp)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Aucun trade</td></tr>';
+
+    // Signaux auto
+    const sigs = status.lastTopSignals || [];
+    document.getElementById('ovSignals').innerHTML = sigs.length
+      ? sigs.map(s=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:.74rem">
+          <span style="color:var(--text);font-weight:600">${s.symbol}</span>
+          <span style="color:var(--muted)">${s.buyExchange} → ${s.sellExchange}</span>
+          <span style="color:var(--green);font-weight:700">+${s.spreadPct?.toFixed(2)}%</span>
+          <span style="color:var(--muted)">+${s.netProfit?.toFixed(2)} USDT</span>
+        </div>`).join('')
+      : '<div style="font-family:var(--mono);font-size:.74rem;color:var(--muted)">Aucun signal récent</div>';
+  } catch(e) { console.error('Overview:', e.message); }
+}
+
+// ── BOT PANEL ──────────────────────────────────────────────────────────────────
+function updateBotTotal() {
+  const okx = parseFloat(document.getElementById('botOkxCap').value)||0;
+  const htx = parseFloat(document.getElementById('botHtxCap').value)||0;
+  document.getElementById('botTotalCap').textContent = (okx+htx).toFixed(0)+' USDT';
+}
+
+// Validation de la paire
+const VALID_PAIRS = ['BTC/USDT','ETH/USDT','BNB/USDT','SOL/USDT','XRP/USDT','ADA/USDT','DOGE/USDT','AVAX/USDT','MATIC/USDT','LINK/USDT','DOT/USDT','LTC/USDT','UNI/USDT','ATOM/USDT','BCH/USDT','NEAR/USDT','APT/USDT','OP/USDT','ARB/USDT','SUI/USDT','SEI/USDT','INJ/USDT','TIA/USDT','RUNE/USDT','FTM/USDT','TON/USDT','GMX/USDT','WIF/USDT','PEPE/USDT','BONK/USDT','EGLD/USDT','KSM/USDT','ALGO/USDT','ICP/USDT','FIL/USDT','HBAR/USDT','VET/USDT','ETC/USDT','XLM/USDT','XMR/USDT','ZEC/USDT','DASH/USDT','LRC/USDT','ENJ/USDT','MANA/USDT','SAND/USDT','AXS/USDT','GALA/USDT','CHZ/USDT'];
+
+function validatePair() {
+  const val = document.getElementById('botPair').value.trim().toUpperCase();
+  const el  = document.getElementById('pairValidMsg');
+  const info= document.getElementById('botPairInfo');
+
+  if (!val) { el.textContent=''; info.style.display='none'; return; }
+
+  // Vérifier format XXX/USDT
+  if (!val.includes('/')) {
+    el.style.color='var(--orange)'; el.textContent='⚠ Format requis : TOKEN/USDT (ex: BTC/USDT)';
+    info.style.display='none'; return;
+  }
+
+  const base = val.split('/')[0];
+  const quote = val.split('/')[1];
+
+  if (quote !== 'USDT') {
+    el.style.color='var(--orange)'; el.textContent='⚠ Seules les paires /USDT sont supportées';
+    info.style.display='none'; return;
+  }
+
+  if (VALID_PAIRS.includes(val)) {
+    el.style.color='var(--green)'; el.textContent='✅ Paire valide et disponible sur OKX + HTX';
+  } else {
+    el.style.color='var(--yellow)'; el.textContent='⚠ Paire non vérifiée — assurez-vous qu\'elle existe sur OKX et HTX';
+  }
+
+  info.style.display='block';
+  info.innerHTML = `⚠️ Pour trader <strong style="color:var(--green)">${val}</strong> :<br>
+    • OKX doit avoir des <strong style="color:var(--green)">USDT</strong> (pour acheter ${base}) ET des <strong style="color:var(--green)">${base}</strong> (pour vendre)<br>
+    • HTX doit avoir des <strong style="color:var(--green)">${base}</strong> (pour vendre) ET des <strong style="color:var(--green)">USDT</strong> (pour acheter)<br>
+    <span style="color:var(--muted)">Alimentez les deux exchanges en ${base} et USDT avant de démarrer.</span>`;
+}
+
+async function startBot() {
+  const pair   = document.getElementById('botPair').value.trim().toUpperCase();
+  const okxCap = parseFloat(document.getElementById('botOkxCap').value)||10;
+  const htxCap = parseFloat(document.getElementById('botHtxCap').value)||10;
+  const spread = parseFloat(document.getElementById('botSpread').value)||2.0;
+  const dryRun = document.getElementById('botDryRun').value === 'true';
+
+  if (!pair) { showMsg('botMsg','⚠ Entrez une paire de trading','err'); return; }
+  if (!pair.includes('/USDT')) { showMsg('botMsg','⚠ Format requis : TOKEN/USDT','err'); return; }
+
+  showMsg('botMsg',`⏳ Démarrage sur ${pair}…`,'info');
+  try {
+    const r = await fetch('/api/bot/start', {
+      method:'POST', headers: ah(),
+      body: JSON.stringify({ adminKey, pair, okxCapital:okxCap, htxCapital:htxCap, minSpreadPct:spread, dryRun })
+    });
+    const d = await r.json();
+    showMsg('botMsg', d.message || d.error, d.success ? 'ok' : 'err');
+    if (d.success) setTimeout(loadBotPanel, 2000);
+  } catch(e) { showMsg('botMsg','Erreur: '+e.message,'err'); }
+}
+
+async function stopBot() {
+  try {
+    const r = await fetch('/api/bot/stop',{method:'POST',headers:ah(),body:JSON.stringify({adminKey})});
+    const d = await r.json();
+    showMsg('botMsg', d.message || d.error, d.success ? 'ok' : 'err');
+    if (d.success) setTimeout(loadBotPanel, 1000);
+  } catch(e) { showMsg('botMsg','Erreur: '+e.message,'err'); }
+}
+
+async function sendBotReport() {
+  try {
+    const r = await fetch('/api/bot/report',{method:'POST',headers:ah(),body:JSON.stringify({adminKey})});
+    const d = await r.json();
+    showMsg('botMsg', d.success ? '✅ Rapport envoyé sur Telegram' : d.error, d.success ? 'ok' : 'err');
+  } catch(e) { showMsg('botMsg','Erreur: '+e.message,'err'); }
+}
+
+async function loadBotPanel() {
+  try {
+    const r = await fetch('/api/bot/status');
+    const d = await r.json();
+    const trades = d.tradeHistory || [];
+    document.getElementById('botTradeTbl').innerHTML = trades.length
+      ? trades.map(t=>`<tr>
+          <td style="color:var(--muted);font-size:.65rem">${t.id?.slice(-8)||'—'}</td>
+          <td style="font-weight:600">${t.symbol}</td>
+          <td style="color:var(--muted)">${t.buyExchange}→${t.sellExchange}</td>
+          <td>+${t.spreadPct?.toFixed(2)}%</td>
+          <td style="color:${t.pnl>0?'var(--green)':'var(--red)'}">${t.pnl>0?'+':''}${t.pnl?.toFixed(4)}</td>
+          <td style="color:var(--muted)">${t.duration?t.duration+'ms':'—'}</td>
+          <td><span class="tag ${t.status==='success'?'tag-active':'tag-free'}">${t.status==='success'?'OK':'ERR'}</span></td>
+          <td style="color:var(--muted);font-size:.65rem">${fmtDate(t.timestamp)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Aucun trade</td></tr>';
+  } catch {}
+}
+
+// ── SIGNAUX ─────────────────────────────────────────────────────────────────────
+async function runAdminScan() {
+  const pairLimit = parseInt(document.getElementById('scanPairs').value)||30;
+  const capital   = parseFloat(document.getElementById('scanCapital').value)||1000;
+  showMsg('adminScanMsg','⏳ Scan en cours…','info');
+  document.getElementById('adminSignalsList').innerHTML = '<div style="font-family:var(--mono);font-size:.74rem;color:var(--muted);text-align:center;padding:20px">Scan en cours…</div>';
+  try {
+    const r = await fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({minSpread:0.05,capital,pairLimit,usePriority:true})});
+    const d = await r.json();
+    showMsg('adminScanMsg',`✅ ${d.stats.totalSignals} signaux trouvés en ${(d.stats.scanDurationMs/1000).toFixed(1)}s`,'ok');
+    renderAdminSignals(d.opportunities);
+  } catch(e) { showMsg('adminScanMsg','Erreur: '+e.message,'err'); }
+}
+
+async function runFullScan() {
+  showMsg('adminScanMsg','⏳ Scan complet en cours (peut prendre 1-3 min)…','info');
+  try {
+    const r = await fetch('/api/scan/full',{method:'POST',headers:ah(),body:JSON.stringify({minSpread:0.05,capital:1000,maxPairs:200})});
+    const d = await r.json();
+    showMsg('adminScanMsg',`✅ ${d.stats.totalSignals} signaux sur ${d.stats.scannedPairs} paires`,'ok');
+    renderAdminSignals(d.opportunities);
+  } catch(e) { showMsg('adminScanMsg','Erreur: '+e.message,'err'); }
+}
+
+function renderAdminSignals(opps) {
+  const el = document.getElementById('adminSignalsList');
+  if (!opps?.length) { el.innerHTML='<div style="font-family:var(--mono);font-size:.74rem;color:var(--muted);text-align:center;padding:30px">Aucun signal</div>'; return; }
+  el.innerHTML = opps.map((o,i)=>{
+    const bc = o.risk==='low'?'tag-standard':o.risk==='medium'?'tag-premium':'tag-diamond';
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:7px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;animation:si .3s ease ${i*40}ms both">
+      <span class="tag ${bc}">${o.risk?.toUpperCase()}</span>
+      <div>
+        <div style="font-family:var(--mono);font-weight:700;font-size:.88rem;margin-bottom:2px">${o.symbol}</div>
+        <div style="font-family:var(--mono);font-size:.67rem;color:var(--muted)">Acheter <span style="color:var(--text)">${o.buyExchange}</span> → Vendre <span style="color:var(--text)">${o.sellExchange}</span></div>
+      </div>
+      <div style="text-align:right;font-family:var(--mono)">
+        <div style="font-size:.67rem;color:var(--orange)">BUY $${fmt(o.buyPrice)}</div>
+        <div style="font-size:.67rem;color:var(--green)">SELL $${fmt(o.sellPrice)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:var(--mono);font-weight:700;color:var(--green)">+${o.spreadPct?.toFixed(2)}%</div>
+        <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted)">+${o.netProfit?.toFixed(2)} USDT</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+@keyframes si{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+// ── USERS ───────────────────────────────────────────────────────────────────────
+async function activateSub() {
+  const email = document.getElementById('subEmail').value.trim();
+  const plan  = document.getElementById('subPlan').value;
+  const ref   = document.getElementById('subRef').value.trim();
+  if (!email) { showMsg('subMsg','Email requis','err'); return; }
+  try {
+    const r = await fetch('/api/payments/usdt/manual',{method:'POST',headers:ah(),body:JSON.stringify({adminKey,email,plan,txHash:ref})});
+    const d = await r.json();
+    showMsg('subMsg', d.message || d.error, d.success ? 'ok' : 'err');
+    if (d.success) loadUsers();
+  } catch(e) { showMsg('subMsg','Erreur: '+e.message,'err'); }
+}
+
+async function loadUsers() {
+  try {
+    const r = await fetch(`/api/admin/subscribers?adminKey=${adminKey}`);
+    const d = await r.json();
+    const rows = d.subscribers || [];
+    document.getElementById('usersTbl').innerHTML = rows.length
+      ? rows.map(s=>{
+          const u = s.users || {};
+          const plan = s.plan || 'premium';
+          const tagClass = plan==='diamond'?'tag-diamond':plan==='premium'?'tag-premium':'tag-standard';
+          return `<tr>
+            <td>${u.name||'—'}</td>
+            <td>${u.email||'—'}</td>
+            <td><span class="tag ${tagClass}">${plan.toUpperCase()}</span></td>
+            <td style="color:var(--muted)">${fmtDate(s.expires_at)}</td>
+            <td style="color:var(--muted);font-size:.7rem">${s.payment_method||'—'}</td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Aucun abonné actif</td></tr>';
+  } catch {}
+}
+
+// ── ALERTES ─────────────────────────────────────────────────────────────────────
+async function loadAlerts() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    document.getElementById('altScan').textContent   = d.autoScanActive ? '✅ Actif' : '❌ Inactif';
+    document.getElementById('altTg').textContent     = d.telegramConfigured ? '✅ Configuré' : '⚠ Non configuré';
+    document.getElementById('altThresh').textContent = `Spread > ${d.alertThreshold}%`;
+    if (d.lastScanTime) document.getElementById('altLast').textContent = new Date(d.lastScanTime).toLocaleTimeString('fr');
+  } catch {}
+}
+
+async function sendCustomTg() {
+  const msg = document.getElementById('tgMsg').value.trim();
+  if (!msg) { showMsg('tgMsgRes','Message vide','err'); return; }
+  try {
+    const r = await fetch('/api/admin/telegram',{method:'POST',headers:ah(),body:JSON.stringify({adminKey,message:msg})});
+    const d = await r.json();
+    showMsg('tgMsgRes', d.success ? '✅ Message envoyé' : '❌ '+d.error, d.success?'ok':'err');
+  } catch(e) { showMsg('tgMsgRes','Erreur: '+e.message,'err'); }
+}
+
+async function sendTestTg() {
+  try {
+    const r = await fetch('/api/alert/test',{method:'POST',headers:{...ah()}});
+    const d = await r.json();
+    showMsg('tgMsgRes', d.success ? '✅ Test envoyé sur Telegram' : '❌ '+d.message, d.success?'ok':'err');
+  } catch(e) { showMsg('tgMsgRes','Erreur: '+e.message,'err'); }
+}
+</script>
+</body>
+</html>

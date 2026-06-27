@@ -500,3 +500,73 @@ app.post('/api/bot/report', async (req, res) => {
   await tradeBot.sendWeeklyReport();
   res.json({ success: true });
 });
+
+// ── ROUTES ADMIN ──────────────────────────────────────────────────────────────
+const bcrypt = require('bcryptjs');
+
+const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || 'admin@arbiscan.com';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'arbiscan2024'; // en clair si pas hashé
+
+// POST /api/admin/login — connexion admin
+app.post('/api/admin/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email et mot de passe requis' });
+
+  // Vérifier email
+  if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    return res.status(401).json({ error: 'Identifiants incorrects' });
+  }
+
+  // Vérifier mot de passe (hash bcrypt ou comparaison directe)
+  let valid = false;
+  if (ADMIN_PASSWORD.startsWith('$2')) {
+    valid = await bcrypt.compare(password, ADMIN_PASSWORD);
+  } else {
+    valid = password === ADMIN_PASSWORD;
+  }
+
+  if (!valid) return res.status(401).json({ error: 'Identifiants incorrects' });
+
+  // Générer token admin
+  const jwt   = require('jsonwebtoken');
+  const token = jwt.sign(
+    { email, role: 'admin', is_admin: true },
+    process.env.JWT_SECRET || 'arbiscan-secret',
+    { expiresIn: '24h' }
+  );
+
+  console.log(`✅ Admin connecté : ${email}`);
+  res.json({
+    success:  true,
+    token,
+    adminKey: process.env.ADMIN_KEY || 'admin',
+    email,
+  });
+});
+
+// POST /api/admin/telegram — envoyer message Telegram custom
+app.post('/api/admin/telegram', async (req, res) => {
+  const { adminKey, message } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Accès refusé' });
+  if (!message) return res.status(400).json({ error: 'Message vide' });
+
+  const { sendTelegram } = require('./telegram');
+  const ok = await sendTelegram(message);
+  res.json({ success: ok });
+});
+
+// Middleware vérif token admin
+function requireAdminToken(req, res, next) {
+  const auth = req.headers.authorization || '';
+  const tok  = auth.replace('Bearer ', '');
+  if (!tok) return res.status(401).json({ error: 'Non authentifié' });
+  try {
+    const jwt     = require('jsonwebtoken');
+    const decoded = jwt.verify(tok, process.env.JWT_SECRET || 'arbiscan-secret');
+    if (decoded.role !== 'admin') return res.status(403).json({ error: 'Accès admin requis' });
+    req.admin = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Token invalide' });
+  }
+}

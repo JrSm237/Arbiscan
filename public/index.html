@@ -197,7 +197,7 @@ input[type=range]{width:100%;cursor:pointer;accent-color:var(--green)}
   .sig .sig-prf{grid-column:1/3;text-align:left}
 }
 
-footer{padding:12px 24px;border-top:1px solid var(--border);font-size:.67rem;color:var(--muted);text-align:center}
+footer{padding:12px 24px;border-top:1px solid var(--border);font-size:.67rem;color:var(--muted);text-align:center;display:flex;align-items:center;justify-content:center;gap:16px}
 </style>
 </head>
 <body>
@@ -500,7 +500,10 @@ footer{padding:12px 24px;border-top:1px solid var(--border);font-size:.67rem;col
   </div>
 </div>
 
-<footer>⚠ ArbiScan — données réelles via CCXT · 6 101 paires USDT · 10 exchanges · Pas de conseils financiers</footer>
+<footer>
+  <span>⚠ ArbiScan — données réelles via CCXT · 6 101 paires USDT · 10 exchanges · Pas de conseils financiers</span>
+  <a href="/admin.html" style="font-family:var(--mono);font-size:.62rem;color:var(--border);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--border)'">admin</a>
+</footer>
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -509,6 +512,7 @@ let activeEx  = new Set(EXCHANGES);
 let autoTimer = null;
 let currentUser  = null;
 let isPremium    = false;
+let isAdmin      = false;
 let token        = localStorage.getItem('arbi_token') || '';
 
 // ── SIDEBAR HTML ──────────────────────────────────────────────────────────────
@@ -634,7 +638,7 @@ function saveSession(d) {
 }
 
 function logout() {
-  token=''; currentUser=null; isPremium=false;
+  token=''; currentUser=null; isPremium=false; isAdmin=false;
   localStorage.removeItem('arbi_token');
   localStorage.removeItem('arbi_user');
   updateHeader();
@@ -659,7 +663,7 @@ async function updateHeader() {
     const r = await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+token}});
     if(!r.ok) { logout(); return; }
     const d = await r.json();
-    currentUser = d.user; isPremium = d.premium;
+    currentUser = d.user; isPremium = d.premium; isAdmin = d.user?.is_admin || false;
     document.getElementById('guestMenu').style.display='none';
     const um = document.getElementById('userMenu'); um.style.display='flex';
     const initials = (d.user.name||d.user.email||'?').charAt(0).toUpperCase();
@@ -669,7 +673,7 @@ async function updateHeader() {
     document.getElementById('userBadgeHead').innerHTML = isPremium
       ? '<span class="badge-premium">⭐ Premium</span>'
       : '<span class="badge-free">Gratuit</span>';
-    document.getElementById('freeBanner').style.display = isPremium ? 'none' : 'flex';
+    document.getElementById('freeBanner').style.display = (isPremium || isAdmin) ? 'none' : 'flex';
   } catch { logout(); }
 }
 
@@ -751,14 +755,15 @@ function renderSignals(opps) {
     el.innerHTML='<div class="empty"><div class="ei">◎</div>Aucune opportunité — baissez le spread.</div>';
     return;
   }
-  // Utilisateur gratuit : limiter à 3 signaux + flouter les prix
-  const limit   = isPremium ? opps.length : 3;
-  const limited = opps.slice(0, limit);
-  el.innerHTML = limited.map((o,i)=>{
+  // Gratuit : 3 signaux visibles, le reste flou + verrouillé
+  // Premium / Admin : tout visible
+  const FREE_LIMIT = 3;
+  el.innerHTML = opps.map((o,i)=>{
     const bc=o.risk==='low'?'bl':o.risk==='medium'?'bm':'bh';
     const bl=o.risk==='low'?'FAIBLE':o.risk==='medium'?'MOYEN':'ÉLEVÉ';
-    const blurred = !isPremium ? 'blurred' : '';
-    return `<div class="sig ${blurred}" style="animation-delay:${i*45}ms">
+    const locked = !isPremium && !isAdmin && i >= FREE_LIMIT;
+    const blurred = locked ? 'blurred' : '';
+    return `<div class="sig ${blurred}" style="animation-delay:${i*45}ms${locked ? ';pointer-events:none' : ''}">
       <div class="badge ${bc}">${bl}</div>
       <div>
         <div class="sig-pair">${o.symbol}</div>
@@ -948,3 +953,4 @@ if(token) updateHeader();
 </script>
 </body>
 </html>
+
