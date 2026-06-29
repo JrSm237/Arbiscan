@@ -182,12 +182,53 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
     <!-- ── BOT TRADING ── -->
     <div class="panel" id="panel-bot">
-      <div class="section">
-        <div class="sec-title">Lancer le bot</div>
+
+      <!-- ÉTAPE 1 : CHOIX DES EXCHANGES -->
+      <div class="section" id="step1Section">
+        <div class="sec-title">Étape 1 — Choisir les exchanges</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px" id="exchangeSelector">
+          <!-- Généré par JS -->
+        </div>
+        <div style="font-family:var(--mono);font-size:.7rem;color:var(--muted)">
+          Sélectionnez exactement 2 exchanges pour l'arbitrage
+        </div>
+        <div id="exSelMsg" style="margin-top:8px"></div>
+        <button class="btn-primary" style="margin-top:12px" onclick="goStep2()">Continuer →</button>
+      </div>
+
+      <!-- ÉTAPE 2 : CONNEXION API -->
+      <div class="section" id="step2Section" style="display:none">
+        <div class="sec-title">Étape 2 — Connexion aux exchanges</div>
+        <div style="font-family:var(--mono);font-size:.72rem;color:var(--yellow);background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:7px;padding:10px 14px;margin-bottom:16px;line-height:1.8">
+          ⚠️ Pour la sécurité : créez des clés API avec uniquement les permissions <strong>Read</strong> + <strong>Trade</strong>.<br>
+          Ne jamais activer les permissions de <strong>Retrait (Withdraw)</strong>.
+        </div>
+
+        <div id="apiFormsContainer" style="display:flex;flex-direction:column;gap:16px">
+          <!-- Généré par JS pour chaque exchange sélectionné -->
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button onclick="goStep1()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:10px 14px;cursor:pointer">← Retour</button>
+          <button class="btn-primary" id="testConnBtn" onclick="testConnections()">🔌 Tester les connexions</button>
+        </div>
+        <div id="connMsg" style="margin-top:10px"></div>
+
+        <!-- Résultats de connexion -->
+        <div id="connResults" style="display:none;margin-top:14px;display:none;flex-direction:column;gap:8px"></div>
+      </div>
+
+      <!-- ÉTAPE 3 : CONFIGURATION BOT -->
+      <div class="section" id="step3Section" style="display:none">
+        <div class="sec-title">Étape 3 — Configuration et lancement</div>
+
+        <!-- Exchanges connectés -->
+        <div id="connectedExchanges" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap"></div>
+
         <div class="form-row" style="margin-bottom:14px">
           <div class="form-field">
             <label>Paire de trading</label>
-            <input type="text" id="botPair" placeholder="ex: BTC/USDT, ETH/USDT…" oninput="this.value=this.value.toUpperCase();validatePair()">
+            <input type="text" id="botPair" placeholder="ex: BTC/USDT" oninput="this.value=this.value.toUpperCase();validatePair()">
             <div id="pairValidMsg" style="font-family:var(--mono);font-size:.67rem;margin-top:4px"></div>
           </div>
           <div class="form-field">
@@ -197,12 +238,12 @@ tr:hover td{background:rgba(255,255,255,.02)}
               <option value="false">💰 Production (vrais trades)</option>
             </select>
           </div>
-          <div class="form-field">
-            <label>Capital OKX (USDT)</label>
+          <div class="form-field" id="capEx1Field">
+            <label id="capEx1Label">Capital Exchange 1 (USDT)</label>
             <input type="number" id="botOkxCap" value="10" min="5" step="1" oninput="updateBotTotal()">
           </div>
-          <div class="form-field">
-            <label>Capital HTX (USDT)</label>
+          <div class="form-field" id="capEx2Field">
+            <label id="capEx2Label">Capital Exchange 2 (USDT)</label>
             <input type="number" id="botHtxCap" value="10" min="5" step="1" oninput="updateBotTotal()">
           </div>
           <div class="form-field">
@@ -215,21 +256,25 @@ tr:hover td{background:rgba(255,255,255,.02)}
             </div>
           </div>
           <div class="form-field">
-            <label>Capital total</label>
+            <label>Capital total engagé</label>
             <div style="font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--green);padding:9px 0" id="botTotalCap">20 USDT</div>
           </div>
         </div>
-        <!-- Instructions paire -->
+
+        <!-- Info paire -->
         <div id="botPairInfo" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:11px 14px;font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:14px;line-height:1.8"></div>
+
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn-primary" onclick="startBot()">▶ Démarrer le bot</button>
           <button onclick="stopBot()" style="font-family:var(--mono);font-size:.78rem;background:rgba(255,107,53,.12);color:var(--orange);border:1px solid rgba(255,107,53,.3);border-radius:6px;padding:10px 16px;cursor:pointer">⏹ Arrêter</button>
           <button onclick="loadBotPanel()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:10px 14px;cursor:pointer">↻ Actualiser</button>
-          <button onclick="sendBotReport()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:10px 14px;cursor:pointer">📊 Rapport Telegram</button>
+          <button onclick="sendBotReport()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:10px 14px;cursor:pointer">📊 Rapport</button>
+          <button onclick="goStep1()" style="font-family:var(--mono);font-size:.78rem;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:10px 14px;cursor:pointer">⚙ Reconfigurer</button>
         </div>
         <div id="botMsg" style="margin-top:10px"></div>
       </div>
 
+      <!-- HISTORIQUE -->
       <div class="section">
         <div class="sec-title">Historique des trades</div>
         <div class="table-wrap">
@@ -427,7 +472,7 @@ function goPanel(name) {
   });
   document.querySelectorAll('.ntab').forEach((t,i) => t.classList.toggle('active', i === panels.indexOf(name)));
   if (name === 'overview') loadOverview();
-  if (name === 'bot')      loadBotPanel();
+  if (name === 'bot')      { loadBotPanel(); initExchangeSelector(); }
   if (name === 'users')    loadUsers();
   if (name === 'alerts')   loadAlerts();
 }
@@ -707,6 +752,208 @@ async function sendTestTg() {
     showMsg('tgMsgRes', d.success ? '✅ Test envoyé sur Telegram' : '❌ '+d.message, d.success?'ok':'err');
   } catch(e) { showMsg('tgMsgRes','Erreur: '+e.message,'err'); }
 }
+
+// ── EXCHANGES DYNAMIQUES ──────────────────────────────────────────────────────
+const EXCHANGES_CONFIG = {
+  okx:     { name:'OKX',     logo:'🔵', hasPassphrase:true  },
+  htx:     { name:'HTX',     logo:'🟠', hasPassphrase:false },
+  binance: { name:'Binance', logo:'🟡', hasPassphrase:false },
+  bybit:   { name:'Bybit',   logo:'🟤', hasPassphrase:false },
+  kucoin:  { name:'KuCoin',  logo:'🟢', hasPassphrase:true  },
+  mexc:    { name:'MEXC',    logo:'⚪', hasPassphrase:false },
+  gate:    { name:'Gate.io', logo:'🔴', hasPassphrase:false },
+  bitget:  { name:'Bitget',  logo:'🟣', hasPassphrase:true  },
+};
+
+let selectedExchanges = [];
+let connectedAPIs     = {};
+let connectionOK      = {};
+
+function initExchangeSelector() {
+  const grid = document.getElementById('exchangeSelector');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(EXCHANGES_CONFIG).map(([id, ex]) => `
+    <div onclick="toggleExchangeSelect('${id}')" id="exCard-${id}"
+      style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;text-align:center;transition:all .2s;user-select:none">
+      <div style="font-size:1.6rem;margin-bottom:6px">${ex.logo}</div>
+      <div style="font-family:var(--mono);font-size:.78rem;font-weight:700;color:var(--text)">${ex.name}</div>
+      <div id="exCheck-${id}" style="font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-top:4px">Sélectionner</div>
+    </div>`).join('');
+}
+
+function toggleExchangeSelect(id) {
+  if (selectedExchanges.includes(id)) {
+    selectedExchanges = selectedExchanges.filter(e => e !== id);
+  } else {
+    if (selectedExchanges.length >= 2) {
+      showMsg('exSelMsg','⚠ Maximum 2 exchanges','err'); return;
+    }
+    selectedExchanges.push(id);
+  }
+  Object.keys(EXCHANGES_CONFIG).forEach(exId => {
+    const card  = document.getElementById('exCard-'+exId);
+    const check = document.getElementById('exCheck-'+exId);
+    const sel   = selectedExchanges.includes(exId);
+    const idx   = selectedExchanges.indexOf(exId);
+    if(card)  { card.style.borderColor = sel ? 'var(--green)' : 'var(--border)'; card.style.background = sel ? 'rgba(0,245,160,.07)' : 'var(--card)'; }
+    if(check) { check.style.color = sel ? 'var(--green)' : 'var(--muted)'; check.textContent = sel ? '✅ Exchange '+(idx+1) : 'Sélectionner'; }
+  });
+  const msg = document.getElementById('exSelMsg');
+  if(msg) msg.innerHTML = selectedExchanges.length === 2
+    ? `<div class="alert alert-ok">✅ ${EXCHANGES_CONFIG[selectedExchanges[0]].name} + ${EXCHANGES_CONFIG[selectedExchanges[1]].name} sélectionnés</div>`
+    : '';
+}
+
+function goStep1() {
+  ['step1Section','step2Section','step3Section'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = i===0 ? 'block' : 'none';
+  });
+}
+
+function goStep2() {
+  if (selectedExchanges.length < 2) { showMsg('exSelMsg','⚠ Sélectionnez 2 exchanges','err'); return; }
+  document.getElementById('step1Section').style.display = 'none';
+  document.getElementById('step2Section').style.display = 'block';
+  document.getElementById('step3Section').style.display = 'none';
+  buildAPIForms();
+}
+
+function buildAPIForms() {
+  const container = document.getElementById('apiFormsContainer');
+  if(!container) return;
+  container.innerHTML = selectedExchanges.map(id => {
+    const ex = EXCHANGES_CONFIG[id];
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">
+      <div style="font-family:var(--mono);font-size:.8rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        ${ex.logo} ${ex.name}
+        <span id="connBadge-${id}" style="margin-left:auto;font-family:var(--mono);font-size:.62rem"></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="form-field">
+          <label>API Key</label>
+          <input type="text" id="api_${id}_key" placeholder="API Key ${ex.name}" autocomplete="off"
+            style="font-family:var(--mono);font-size:.76rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:100%">
+        </div>
+        <div class="form-field">
+          <label>Secret Key</label>
+          <input type="password" id="api_${id}_secret" placeholder="Secret ${ex.name}" autocomplete="off"
+            style="font-family:var(--mono);font-size:.76rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:100%">
+        </div>
+        ${ex.hasPassphrase ? `<div class="form-field">
+          <label>Passphrase</label>
+          <input type="password" id="api_${id}_passphrase" placeholder="Passphrase ${ex.name}" autocomplete="off"
+            style="font-family:var(--mono);font-size:.76rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 12px;outline:none;width:100%">
+        </div>` : ''}
+      </div>
+      <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);margin-top:8px">
+        ⚠️ Permissions : <span style="color:var(--green)">Read</span> + <span style="color:var(--green)">Trade</span> uniquement — <span style="color:var(--red)">PAS de Withdraw</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function testConnections() {
+  const btn = document.getElementById('testConnBtn');
+  btn.disabled = true; btn.textContent = '⏳ Test…';
+  showMsg('connMsg','Test en cours…','info');
+
+  const apiConfigs = {};
+  for (const id of selectedExchanges) {
+    const key = document.getElementById('api_'+id+'_key')?.value.trim();
+    const sec = document.getElementById('api_'+id+'_secret')?.value.trim();
+    const pas = document.getElementById('api_'+id+'_passphrase')?.value.trim() || '';
+    if (!key || !sec) {
+      showMsg('connMsg','⚠ Clés manquantes pour '+EXCHANGES_CONFIG[id].name,'err');
+      btn.disabled=false; btn.textContent='🔌 Tester les connexions'; return;
+    }
+    apiConfigs[id] = { apiKey:key, secret:sec, passphrase:pas };
+  }
+
+  try {
+    const r = await fetch('/api/bot/test-connections', {
+      method:'POST', headers:ah(),
+      body:JSON.stringify({ adminKey, exchanges:selectedExchanges, apiConfigs })
+    });
+    const d = await r.json();
+
+    let allOk = true;
+    const html = selectedExchanges.map(id => {
+      const res = d.results?.[id] || {};
+      const ok  = res.success;
+      if(!ok) allOk = false;
+      connectionOK[id] = ok;
+      const badge = document.getElementById('connBadge-'+id);
+      if(badge) { badge.style.color = ok?'var(--green)':'var(--red)'; badge.textContent = ok?'✅ Connecté':'❌ Échec'; }
+      return `<div style="background:var(--card);border:1px solid ${ok?'rgba(0,245,160,.25)':'rgba(239,68,68,.25)'};border-radius:7px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.2rem">${EXCHANGES_CONFIG[id].logo}</span>
+        <div>
+          <div style="font-family:var(--mono);font-size:.78rem;font-weight:700">${EXCHANGES_CONFIG[id].name}</div>
+          <div style="font-family:var(--mono);font-size:.7rem;color:${ok?'var(--green)':'var(--red)'}">${ok ? '✅ Connecté — '+res.usdtBalance?.toFixed(2)+' USDT' : '❌ '+res.error}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    const cr = document.getElementById('connResults');
+    if(cr) { cr.innerHTML=html; cr.style.display='flex'; }
+
+    if(allOk) {
+      connectedAPIs = apiConfigs;
+      showMsg('connMsg','✅ Connexions réussies — Configuration du bot…','ok');
+      setTimeout(goStep3, 1500);
+    } else {
+      showMsg('connMsg','❌ Vérifiez vos clés API','err');
+    }
+  } catch(e) { showMsg('connMsg','Erreur: '+e.message,'err'); }
+  finally { btn.disabled=false; btn.textContent='🔌 Tester les connexions'; }
+}
+
+function goStep3() {
+  document.getElementById('step1Section').style.display = 'none';
+  document.getElementById('step2Section').style.display = 'none';
+  document.getElementById('step3Section').style.display = 'block';
+
+  const ex1 = selectedExchanges[0], ex2 = selectedExchanges[1];
+  const connEl = document.getElementById('connectedExchanges');
+  if(connEl) connEl.innerHTML = [ex1,ex2].map(id =>
+    `<div style="background:var(--card);border:1px solid rgba(0,245,160,.25);border-radius:7px;padding:8px 14px;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.75rem">
+      ${EXCHANGES_CONFIG[id].logo} <span style="color:var(--green);font-weight:700">${EXCHANGES_CONFIG[id].name}</span> ✅
+    </div>`).join('');
+
+  const l1 = document.getElementById('capEx1Label');
+  const l2 = document.getElementById('capEx2Label');
+  if(l1) l1.textContent = 'Capital '+EXCHANGES_CONFIG[ex1].name+' (USDT)';
+  if(l2) l2.textContent = 'Capital '+EXCHANGES_CONFIG[ex2].name+' (USDT)';
+}
+
+function updateBotTotal() {
+  const c1 = parseFloat(document.getElementById('botOkxCap')?.value)||0;
+  const c2 = parseFloat(document.getElementById('botHtxCap')?.value)||0;
+  const el = document.getElementById('botTotalCap');
+  if(el) el.textContent = (c1+c2).toFixed(0)+' USDT';
+}
+
+function validatePair() {
+  const val  = (document.getElementById('botPair')?.value||'').trim().toUpperCase();
+  const el   = document.getElementById('pairValidMsg');
+  const info = document.getElementById('botPairInfo');
+  if(!el) return;
+  if(!val) { el.textContent=''; if(info) info.style.display='none'; return; }
+  const valid = /^[A-Z0-9]+\/USDT$/.test(val);
+  el.style.color = valid ? 'var(--green)' : 'var(--orange)';
+  el.textContent  = valid ? '✅ Format valide' : '⚠ Format requis : TOKEN/USDT';
+  if(info && valid) {
+    const base = val.split('/')[0];
+    const n1 = EXCHANGES_CONFIG[selectedExchanges[0]]?.name||'Exchange 1';
+    const n2 = EXCHANGES_CONFIG[selectedExchanges[1]]?.name||'Exchange 2';
+    info.style.display='block';
+    info.innerHTML=`📋 Pour trader <strong style="color:var(--green)">${val}</strong> :<br>
+      • <strong>${n1}</strong> : avoir des <strong style="color:var(--green)">USDT</strong> + <strong style="color:var(--green)">${base}</strong><br>
+      • <strong>${n2}</strong> : avoir des <strong style="color:var(--green)">${base}</strong> + <strong style="color:var(--green)">USDT</strong>`;
+  } else if(info) info.style.display='none';
+}
+
 </script>
 </body>
 </html>
+

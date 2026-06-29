@@ -31,14 +31,22 @@ async function checkPremium(userId) {
 }
 
 // ── CRÉER / METTRE À JOUR UN USER ─────────────────────────────────────────────
-async function upsertUser({ email, phone, name, telegram_id }) {
+async function upsertUser({ email, phone, name, telegram_id, password }) {
   const sb = getSupabase();
-  if (!sb) return null;
+
+  // Si Supabase non configuré — mode simplifié en mémoire
+  if (!sb) {
+    console.warn('⚠ Supabase non configuré — compte en mémoire uniquement');
+    const fakeUser = { id: 'local-' + Date.now(), email, name, phone, telegram_id, password };
+    return fakeUser;
+  }
+
+  const fields = { email, phone, name, telegram_id, updated_at: new Date().toISOString() };
+  if (password) fields.password = password;
 
   const { data, error } = await sb
     .from('users')
-    .upsert({ email, phone, name, telegram_id, updated_at: new Date().toISOString() },
-             { onConflict: 'email' })
+    .upsert(fields, { onConflict: 'email' })
     .select()
     .single();
 
@@ -76,7 +84,10 @@ async function activateSubscription(userId, { plan = 'monthly', paymentRef, paym
 // ── RÉCUPÉRER UN USER PAR EMAIL ───────────────────────────────────────────────
 async function getUserByEmail(email) {
   const sb = getSupabase();
-  if (!sb) return null;
+  if (!sb) {
+    console.warn('⚠ Supabase non configuré — getUserByEmail retourne null');
+    return null;
+  }
   const { data } = await sb.from('users').select('*').eq('email', email).single();
   return data;
 }

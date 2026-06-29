@@ -291,10 +291,12 @@ app.get('/api/plans', (req, res) => {
 
 // POST /api/auth/register — inscription
 app.post('/api/auth/register', async (req, res) => {
-  const { email, phone, name, telegram_id } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email requis' });
+  const { email, phone, name, telegram_id, password } = req.body;
+  if (!email)    return res.status(400).json({ error: 'Email requis' });
+  if (!password) return res.status(400).json({ error: 'Mot de passe requis' });
+  if (password.length < 6) return res.status(400).json({ error: 'Mot de passe trop court (min. 6 caractères)' });
 
-  const user = await upsertUser({ email, phone, name, telegram_id });
+  const user = await upsertUser({ email, phone, name, telegram_id, password });
   if (!user) return res.status(500).json({ error: 'Erreur création compte' });
 
   const token = generateToken(user);
@@ -586,4 +588,56 @@ function requireAdminToken(req, res, next) {
     return res.status(401).json({ error: 'Token invalide' });
   }
 }
+
+// ── ROUTE TEST CONNEXIONS EXCHANGES ──────────────────────────────────────────
+app.post('/api/bot/test-connections', async (req, res) => {
+  const { adminKey, exchanges: exIds, apiConfigs } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Accès refusé' });
+
+  const ccxt    = require('ccxt');
+  const results = {};
+
+  for (const id of (exIds || [])) {
+    const cfg = apiConfigs?.[id] || {};
+    try {
+      // Créer instance avec les clés fournies
+      const ExClass = ccxt[id];
+      if (!ExClass) { results[id] = { success: false, error: `Exchange "${id}" non supporté` }; continue; }
+
+      const ex = new ExClass({
+        apiKey:   cfg.apiKey,
+        secret:   cfg.secret,
+        password: cfg.passphrase || '',
+        timeout:  8000,
+        enableRateLimit: true,
+        options: { defaultType: 'spot' },
+      });
+
+      // Tester avec fetchBalance (nécessite authentification)
+      const bal  = await ex.fetchBalance();
+      const usdt = bal?.USDT?.free ?? bal?.USDT?.total ?? 0;
+
+      results[id] = {
+        success:     true,
+        usdtBalance: parseFloat(usdt) || 0,
+        message:     `Connecté — ${parseFloat(usdt).toFixed(2)} USDT disponible`,
+      };
+
+      console.log(`✅ ${id} connecté — USDT: ${usdt}`);
+
+    } catch (e) {
+      results[id] = {
+        success: false,
+        error:   e.message?.split('\n')[0]?.slice(0, 120) || 'Erreur connexion',
+      };
+      console.error(`❌ ${id} échec:`, e.message?.slice(0, 100));
+    }
+  }
+
+  res.json({ results });
+});
+
+// Mettre à jour /api/bot/start pour accepter exchange1/exchange2 dynamiques
+// (overwrite la config du bot avec les exchanges et clés fournis)
+
 

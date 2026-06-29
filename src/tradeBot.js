@@ -14,7 +14,9 @@ const CONFIG = {
   CAPITAL_PER_LEG: parseFloat(process.env.CAPITAL_PER_LEG || '10'),
   OKX_CAPITAL:     parseFloat(process.env.CAPITAL_PER_LEG || '10'),
   HTX_CAPITAL:     parseFloat(process.env.CAPITAL_PER_LEG || '10'),
-  SELECTED_PAIR:   null,   // null = toutes les paires prioritaires
+  SELECTED_PAIR:   null,
+  EXCHANGE_1:      'okx',  // exchange principal (modifiable dynamiquement)
+  EXCHANGE_2:      'htx',  // exchange secondaire
   FEE_PCT:         0.1,
   SCAN_INTERVAL:   15000,
   ORDER_TIMEOUT:   10000,
@@ -23,11 +25,18 @@ const CONFIG = {
 };
 
 // ── EXCHANGES ─────────────────────────────────────────────────────────────────
-const exchanges = {
+// Instances PUBLIQUES pour fetch des prix (pas besoin de clés)
+const publicExchanges = {
+  okx: new ccxt.okx({ timeout: 10000, enableRateLimit: true, options: { defaultType: 'spot' } }),
+  htx: new ccxt.htx({ timeout: 10000, enableRateLimit: true, options: { defaultType: 'spot' } }),
+};
+
+// Instances PRIVÉES pour passer les ordres (nécessitent clés API)
+const privateExchanges = {
   okx: new ccxt.okx({
     apiKey:     process.env.OKX_API_KEY,
     secret:     process.env.OKX_SECRET,
-    password:   process.env.OKX_PASSPHRASE, // OKX nécessite un passphrase
+    password:   process.env.OKX_PASSPHRASE,
     timeout:    10000,
     enableRateLimit: true,
     options: { defaultType: 'spot' },
@@ -40,6 +49,9 @@ const exchanges = {
     options: { defaultType: 'spot' },
   }),
 };
+
+// Alias pour compatibilité
+const exchanges = privateExchanges;
 
 // ── PAIRES PRIORITAIRES (celles qui ont montré des spreads) ───────────────────
 const PRIORITY_PAIRS = [
@@ -89,7 +101,8 @@ async function tg(msg) {
 // ── FETCH TICKER ──────────────────────────────────────────────────────────────
 async function fetchTicker(exchangeId, symbol) {
   try {
-    const ex = exchanges[exchangeId];
+    // Toujours utiliser l'instance publique pour les prix (pas besoin de clés API)
+    const ex = publicExchanges[exchangeId];
     const t  = await ex.fetchTicker(symbol);
     if (!t || (!t.bid && !t.ask && !t.last)) return null;
     return {
@@ -100,23 +113,42 @@ async function fetchTicker(exchangeId, symbol) {
       last:   t.last,
       volume: t.baseVolume || 0,
     };
-  } catch {
+  } catch(e) {
+    console.log(`[fetchTicker] ${exchangeId} ${symbol}: ${e.message}`);
     return null;
   }
 }
 
 // ── FETCH BALANCES ────────────────────────────────────────────────────────────
 async function fetchBalances() {
-  for (const [id, ex] of Object.entries(exchanges)) {
+  for (const [id, ex] of Object.entries(privateExchanges)) {
     try {
+      // Ne fetch les balances que si les clés API sont configurées
+      const hasKey = id === 'okx'
+        ? process.env.OKX_API_KEY
+        : process.env.HTX_API_KEY;
+
+      if (!hasKey) {
+        // Mode DRY_RUN sans clés : balances simulées
+        state.balances[id] = {
+          USDT:  CONFIG.DRY_RUN ? (id === 'okx' ? CONFIG.OKX_CAPITAL : CONFIG.HTX_CAPITAL) : 0,
+          total: {},
+          free:  {},
+          simulated: true,
+        };
+        continue;
+      }
+
       const bal = await ex.fetchBalance();
       state.balances[id] = {
-        USDT: bal.USDT?.free || 0,
-        total: bal.total,
-        free:  bal.free,
+        USDT:  bal.USDT?.free  || 0,
+        total: bal.total || {},
+        free:  bal.free  || {},
       };
     } catch (e) {
       console.error(`Balance ${id}:`, e.message);
+      // En cas d'erreur, ne pas bloquer — balances à 0
+      state.balances[id] = { USDT: 0, total: {}, free: {}, error: e.message };
     }
   }
   return state.balances;
@@ -124,21 +156,23 @@ async function fetchBalances() {
 
 // ── VÉRIFIER QU'ON A ASSEZ DE FONDS ──────────────────────────────────────────
 function hasEnoughFunds(buyExchange, sellExchange, symbol, buyPrice) {
+  // En simulation : toujours autoriser le trade
+  if (CONFIG.DRY_RUN) {
+    return { ok: true, simulated: true };
+  }
+
   const base = symbol.split('/')[0];
-
-  // Capital par exchange (OKX ou HTX)
-  const buyerCapital  = buyExchange  === 'okx' ? CONFIG.OKX_CAPITAL : CONFIG.HTX_CAPITAL;
-  const sellerCapital = sellExchange === 'okx' ? CONFIG.OKX_CAPITAL : CONFIG.HTX_CAPITAL;
-
-  const buyerUSDT   = state.balances[buyExchange]?.USDT || 0;
-  const sellerToken = state.balances[sellExchange]?.free?.[base] || 0;
-  const neededToken = buyerCapital / buyPrice;
+  // Capital selon quel exchange achète
+  const buyerCapital = buyExchange === CONFIG.EXCHANGE_1 ? CONFIG.OKX_CAPITAL : CONFIG.HTX_CAPITAL;
+  const buyerUSDT    = state.balances[buyExchange]?.USDT || 0;
+  const sellerToken  = state.balances[sellExchange]?.free?.[base] || 0;
+  const neededToken  = buyerCapital / buyPrice;
 
   if (buyerUSDT < buyerCapital) {
-    return { ok: false, reason: `${buyExchange} : USDT insuffisant (${buyerUSDT.toFixed(2)} < ${buyerCapital})` };
+    return { ok: false, reason: `${buyExchange}: USDT insuffisant (${buyerUSDT.toFixed(2)} < ${buyerCapital})` };
   }
   if (sellerToken < neededToken) {
-    return { ok: false, reason: `${sellExchange} : ${base} insuffisant (${sellerToken.toFixed(6)} < ${neededToken.toFixed(6)})` };
+    return { ok: false, reason: `${sellExchange}: ${base} insuffisant (${sellerToken.toFixed(6)} < ${neededToken.toFixed(6)})` };
   }
   return { ok: true };
 }
@@ -148,8 +182,16 @@ async function placeMarketOrder(exchangeId, symbol, side, amount) {
   const ex = exchanges[exchangeId];
 
   if (CONFIG.DRY_RUN) {
-    console.log(`[DRY RUN] ${side.toUpperCase()} ${amount.toFixed(6)} ${symbol} on ${exchangeId}`);
-    return { id: 'dry-run-' + Date.now(), status: 'closed', filled: amount, average: 0 };
+    // Simuler un ordre avec un léger slippage réaliste (0.05%)
+    const slippage = side === 'buy' ? 1.0005 : 0.9995;
+    console.log(`[SIM] ${side.toUpperCase()} ${amount.toFixed(6)} ${symbol} on ${exchangeId}`);
+    return {
+      id:      'sim-' + Date.now(),
+      status:  'closed',
+      filled:  amount,
+      average: 0, // sera remplacé par buyPrice/sellPrice dans executeTrade
+      simulated: true,
+    };
   }
 
   try {
@@ -172,8 +214,9 @@ async function executeTrade(opp) {
 
   const { symbol, buyExchange, sellExchange, buyPrice, sellPrice, spreadPct } = opp;
   const base     = symbol.split('/')[0];
-  const amount   = CONFIG.CAPITAL_PER_LEG / buyPrice;
-  const feeCost  = CONFIG.CAPITAL_PER_LEG * (CONFIG.FEE_PCT / 100) * 2; // 2 legs
+  const capital  = buyExchange === 'okx' ? CONFIG.OKX_CAPITAL : CONFIG.HTX_CAPITAL;
+  const amount   = capital / buyPrice;
+  const feeCost  = capital * (CONFIG.FEE_PCT / 100) * 2; // 2 legs
   const grossPnL = amount * (sellPrice - buyPrice);
   const netPnL   = grossPnL - feeCost;
 
@@ -201,9 +244,23 @@ ${CONFIG.DRY_RUN ? '\n⚠️ _MODE SIMULATION — pas de vrai trade_' : ''}`);
     const elapsed = Date.now() - startTime;
 
     // Calcul PnL réel
+    // En simulation, average=0 donc on utilise les prix réels détectés
     const realBuyPrice  = buyOrder.average  || buyPrice;
     const realSellPrice = sellOrder.average || sellPrice;
     const realPnL = (realSellPrice - realBuyPrice) * amount - feeCost;
+
+    // En simulation : mettre à jour les balances simulées
+    if (CONFIG.DRY_RUN) {
+      const b = symbol.split('/')[0];
+      if (!state.balances[buyExchange])  state.balances[buyExchange]  = { USDT: capital, free: {} };
+      if (!state.balances[sellExchange]) state.balances[sellExchange] = { USDT: capital, free: {} };
+      // Acheteur perd des USDT, gagne des tokens
+      state.balances[buyExchange].USDT -= capital;
+      state.balances[buyExchange].free[b] = (state.balances[buyExchange].free[b] || 0) + amount;
+      // Vendeur perd des tokens, gagne des USDT
+      state.balances[sellExchange].free[b] = Math.max(0, (state.balances[sellExchange].free[b] || 0) - amount);
+      state.balances[sellExchange].USDT += (amount * realSellPrice) - feeCost / 2;
+    }
 
     state.totalPnL      += realPnL;
     state.successTrades++;
@@ -284,27 +341,31 @@ async function scanAndTrade() {
 
   // Si une paire spécifique est sélectionnée, on ne scanne que celle-là
   const pairsToScan = CONFIG.SELECTED_PAIR ? [CONFIG.SELECTED_PAIR] : PRIORITY_PAIRS;
+  const ex1 = CONFIG.EXCHANGE_1;
+  const ex2 = CONFIG.EXCHANGE_2;
+  console.log(`🔍 Scan — ${pairsToScan.length} paire(s) sur ${ex1}↔${ex2} — spread min: ${CONFIG.MIN_SPREAD_PCT}% [${CONFIG.DRY_RUN?'SIM':'LIVE'}]`);
+  let signalsFound = 0;
 
   for (const symbol of pairsToScan) {
     if (state.activeTrade) break;
 
     try {
-      const [okxTicker, htxTicker] = await Promise.all([
-        fetchTicker('okx', symbol),
-        fetchTicker('htx', symbol),
+      const [ex1Ticker, ex2Ticker] = await Promise.all([
+        fetchTicker(ex1, symbol),
+        fetchTicker(ex2, symbol),
       ]);
 
-      if (!okxTicker || !htxTicker) continue;
+      if (!ex1Ticker || !ex2Ticker) continue;
 
-      // Vérifier les deux sens : OKX→HTX et HTX→OKX
+      // Vérifier les deux sens
       const opportunities = [
         {
-          buyExchange:  'okx',  buyPrice:  okxTicker.ask || okxTicker.last,
-          sellExchange: 'htx',  sellPrice: htxTicker.bid || htxTicker.last,
+          buyExchange:  ex1,  buyPrice:  ex1Ticker.ask || ex1Ticker.last,
+          sellExchange: ex2,  sellPrice: ex2Ticker.bid || ex2Ticker.last,
         },
         {
-          buyExchange:  'htx',  buyPrice:  htxTicker.ask || htxTicker.last,
-          sellExchange: 'okx',  sellPrice: okxTicker.bid || okxTicker.last,
+          buyExchange:  ex2,  buyPrice:  ex2Ticker.ask || ex2Ticker.last,
+          sellExchange: ex1,  sellPrice: ex1Ticker.bid || ex1Ticker.last,
         },
       ];
 
@@ -324,13 +385,18 @@ async function scanAndTrade() {
         }
 
         // ✅ Opportunité valide — on trade !
-        console.log(`🎯 Signal: ${symbol} +${netSpread.toFixed(2)}% net — ${opp.buyExchange}→${opp.sellExchange}`);
+        signalsFound++;
+        console.log(`🎯 Signal: ${symbol} +${netSpread.toFixed(2)}% net — ${opp.buyExchange}→${opp.sellExchange} [${CONFIG.DRY_RUN ? 'SIM' : 'LIVE'}]`);
         await executeTrade({ symbol, spreadPct: netSpread, ...opp });
         break;
       }
     } catch (e) {
       console.error(`Scan ${symbol}:`, e.message);
     }
+  }
+
+  if (signalsFound === 0) {
+    console.log(`📭 Aucun signal trouvé (spread < ${CONFIG.MIN_SPREAD_PCT}% sur ${pairsToScan.join(', ')})`);
   }
 }
 
@@ -361,17 +427,45 @@ async function start(dynamicConfig = {}) {
   }
 
   // Appliquer la config dynamique
-  if (dynamicConfig.minSpreadPct)  CONFIG.MIN_SPREAD_PCT   = dynamicConfig.minSpreadPct;
-  if (dynamicConfig.okxCapital)    CONFIG.OKX_CAPITAL      = dynamicConfig.okxCapital;
-  if (dynamicConfig.htxCapital)    CONFIG.HTX_CAPITAL      = dynamicConfig.htxCapital;
-  if (dynamicConfig.dryRun !== undefined) CONFIG.DRY_RUN   = dynamicConfig.dryRun;
+  if (dynamicConfig.minSpreadPct)       CONFIG.MIN_SPREAD_PCT = dynamicConfig.minSpreadPct;
+  if (dynamicConfig.okxCapital != null) CONFIG.OKX_CAPITAL    = dynamicConfig.okxCapital;
+  if (dynamicConfig.htxCapital != null) CONFIG.HTX_CAPITAL    = dynamicConfig.htxCapital;
+  if (dynamicConfig.dryRun !== undefined) CONFIG.DRY_RUN      = dynamicConfig.dryRun;
 
-  // Paire sélectionnée — mode single pair ou multi pairs
+  // Exchanges dynamiques fournis depuis l'admin
+  if (dynamicConfig.exchange1 && dynamicConfig.exchange2) {
+    CONFIG.EXCHANGE_1 = dynamicConfig.exchange1;
+    CONFIG.EXCHANGE_2 = dynamicConfig.exchange2;
+
+    // Reconfigurer les instances privées avec les nouvelles clés API
+    if (dynamicConfig.apiConfigs) {
+      const ccxt = require('ccxt');
+      for (const [id, cfg] of Object.entries(dynamicConfig.apiConfigs)) {
+        if (!ccxt[id]) continue;
+        privateExchanges[id] = new ccxt[id]({
+          apiKey:   cfg.apiKey,
+          secret:   cfg.secret,
+          password: cfg.passphrase || '',
+          timeout:  10000,
+          enableRateLimit: true,
+          options: { defaultType: 'spot' },
+        });
+        publicExchanges[id] = new ccxt[id]({
+          timeout: 10000,
+          enableRateLimit: true,
+          options: { defaultType: 'spot' },
+        });
+        console.log(`🔑 ${id} configuré avec clés API fournies`);
+      }
+    }
+  }
+
+  // Paire sélectionnée
   if (dynamicConfig.pair) {
-    CONFIG.SELECTED_PAIR = dynamicConfig.pair;
+    CONFIG.SELECTED_PAIR   = dynamicConfig.pair;
     CONFIG.CAPITAL_PER_LEG = Math.min(dynamicConfig.okxCapital || 10, dynamicConfig.htxCapital || 10);
   } else {
-    CONFIG.SELECTED_PAIR = null;
+    CONFIG.SELECTED_PAIR   = null;
     CONFIG.CAPITAL_PER_LEG = parseFloat(process.env.CAPITAL_PER_LEG || '10');
   }
 
@@ -389,22 +483,25 @@ async function start(dynamicConfig = {}) {
   // Vérifier les connexions et charger les balances
   try {
     await fetchBalances();
-    const okxUSDT = state.balances.okx?.USDT || 0;
-    const htxUSDT = state.balances.htx?.USDT || 0;
+    const ex1Label = CONFIG.EXCHANGE_1.toUpperCase();
+    const ex2Label = CONFIG.EXCHANGE_2.toUpperCase();
+    const ex1USDT  = state.balances[CONFIG.EXCHANGE_1]?.USDT || 0;
+    const ex2USDT  = state.balances[CONFIG.EXCHANGE_2]?.USDT || 0;
 
     await tg(`🚀 *ArbiScan Bot DÉMARRÉ*
 
 🤖 *Mode :* ${CONFIG.DRY_RUN ? '🧪 Simulation' : '💰 Production'}
 💎 *Paire :* ${CONFIG.SELECTED_PAIR || 'Multi-paires (top 30)'}
+🏦 *Exchanges :* ${ex1Label} ↔ ${ex2Label}
 📈 *Spread min :* ${CONFIG.MIN_SPREAD_PCT}%
-💵 *Capital OKX :* ${CONFIG.OKX_CAPITAL} USDT
-💵 *Capital HTX :* ${CONFIG.HTX_CAPITAL} USDT
+💵 *Capital ${ex1Label} :* ${CONFIG.OKX_CAPITAL} USDT
+💵 *Capital ${ex2Label} :* ${CONFIG.HTX_CAPITAL} USDT
 
-*Balances actuelles :*
-🔵 OKX USDT : \`${okxUSDT.toFixed(2)}\`
-🟠 HTX USDT : \`${htxUSDT.toFixed(2)}\`
+*Balances :*
+${ex1Label} USDT : \`${ex1USDT.toFixed(2)}\`
+${ex2Label} USDT : \`${ex2USDT.toFixed(2)}\`
 
-_Scan toutes les ${CONFIG.SCAN_INTERVAL / 1000}s — Trades automatiques si spread > ${CONFIG.MIN_SPREAD_PCT}%_`);
+_Scan toutes les ${CONFIG.SCAN_INTERVAL / 1000}s — Trade si spread > ${CONFIG.MIN_SPREAD_PCT}%_`);
 
   } catch (e) {
     console.error('Erreur démarrage:', e.message);
@@ -439,7 +536,9 @@ function getState() {
     ...state,
     config: {
       ...CONFIG,
-      selectedPair: CONFIG.SELECTED_PAIR || 'Multi-paires',
+      selectedPair:  CONFIG.SELECTED_PAIR  || 'Multi-paires',
+      exchange1:     CONFIG.EXCHANGE_1,
+      exchange2:     CONFIG.EXCHANGE_2,
     }
   };
 }

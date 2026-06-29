@@ -481,7 +481,8 @@ footer{padding:12px 24px;border-top:1px solid var(--border);font-size:.67rem;col
 
     <!-- LOGIN -->
     <div id="form-login" class="modal-form">
-      <label>Email <input type="email" id="loginEmail" placeholder="votre@email.com"></label>
+      <label>Email <input type="email" id="loginEmail" placeholder="votre@email.com" onkeydown="if(event.key==='Enter')doLogin()"></label>
+      <label>Mot de passe <input type="password" id="loginPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></label>
       <div id="loginMsg" class="modal-msg"></div>
       <button class="btn-submit" onclick="doLogin()">Se connecter →</button>
       <div style="font-size:.75rem;color:var(--muted);text-align:center">Pas encore de compte ? <span onclick="switchAuthTab('register')" style="color:var(--green);cursor:pointer">S'inscrire</span></div>
@@ -491,6 +492,7 @@ footer{padding:12px 24px;border-top:1px solid var(--border);font-size:.67rem;col
     <div id="form-register" class="modal-form" style="display:none">
       <label>Nom complet <input type="text" id="regName" placeholder="Jordan Dupont"></label>
       <label>Email <input type="email" id="regEmail" placeholder="votre@email.com"></label>
+      <label>Mot de passe <input type="password" id="regPassword" placeholder="Minimum 6 caractères"></label>
       <label>Téléphone <input type="tel" id="regPhone" placeholder="+237 6XX XXX XXX"></label>
       <label>Username Telegram <input type="text" id="regTelegram" placeholder="@votre_username"></label>
       <div id="regMsg" class="modal-msg"></div>
@@ -604,28 +606,33 @@ function switchAuthTab(tab) {
 }
 
 async function doLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  if(!email) return showMsg('loginMsg','Email requis','err');
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if(!email)    return showMsg('loginMsg','Email requis','err');
+  if(!password) return showMsg('loginMsg','Mot de passe requis','err');
   showMsg('loginMsg','Connexion…','');
   try {
-    const r = await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const r = await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
     const d = await r.json();
     if(d.success) { saveSession(d); closeAuth(); updateHeader(); }
-    else showMsg('loginMsg', d.error||'Erreur','err');
+    else showMsg('loginMsg', d.error||'Identifiants incorrects','err');
   } catch(e) { showMsg('loginMsg','Erreur réseau','err'); }
 }
 
 async function doRegister() {
-  const name=document.getElementById('regName').value.trim();
-  const email=document.getElementById('regEmail').value.trim();
-  const phone=document.getElementById('regPhone').value.trim();
-  const telegram=document.getElementById('regTelegram').value.trim();
-  if(!email) return showMsg('regMsg','Email requis','err');
+  const name     = document.getElementById('regName').value.trim();
+  const email    = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const phone    = document.getElementById('regPhone').value.trim();
+  const telegram = document.getElementById('regTelegram').value.trim();
+  if(!email)              return showMsg('regMsg','Email requis','err');
+  if(!password)           return showMsg('regMsg','Mot de passe requis','err');
+  if(password.length < 6) return showMsg('regMsg','Mot de passe trop court (min. 6 caractères)','err');
   showMsg('regMsg','Création du compte…','');
   try {
-    const r = await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,telegram_id:telegram})});
+    const r = await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password,phone,telegram_id:telegram})});
     const d = await r.json();
-    if(d.success) { saveSession(d); closeAuth(); updateHeader(); showMsg('regMsg','Compte créé !','ok'); }
+    if(d.success) { saveSession(d); closeAuth(); updateHeader(); }
     else showMsg('regMsg',d.error||'Erreur','err');
   } catch(e) { showMsg('regMsg','Erreur réseau','err'); }
 }
@@ -953,4 +960,5 @@ if(token) updateHeader();
 </script>
 </body>
 </html>
+
 
